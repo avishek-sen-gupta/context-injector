@@ -25,8 +25,10 @@ echo "Installing hooks..."
 mkdir -p ~/.claude/plugins/context-injector/hooks
 cp "$PLUGIN_DIR/hooks/user-prompt-submit.sh" ~/.claude/plugins/context-injector/hooks/
 cp "$PLUGIN_DIR/hooks/pre-tool-use.sh" ~/.claude/plugins/context-injector/hooks/
+cp "$PLUGIN_DIR/hooks/session-start.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
 
 echo "Installing /ctx command..."
 cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
@@ -46,6 +48,18 @@ if [ "$ALREADY_WIRED" = "false" ]; then
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
   echo "UserPromptSubmit hook already wired, skipping."
+fi
+
+# --- wire SessionStart hook (idempotent) ---
+ALREADY_WIRED=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
+if [ "$ALREADY_WIRED" = "false" ]; then
+  echo "Wiring SessionStart hook..."
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"}]}'
+  jq --argjson entry "$HOOK_ENTRY" \
+    '.hooks.SessionStart = ((.hooks.SessionStart // []) + [$entry])' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+else
+  echo "SessionStart hook already wired, skipping."
 fi
 
 # --- wire PreToolUse hook (idempotent) ---

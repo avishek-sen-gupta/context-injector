@@ -5,6 +5,7 @@ A Claude Code plugin that auto-injects core + classified conditional context int
 ## How it works
 
 - **`/ctx`** — toggles context injection on or off for the current project. State is stored in `/tmp/ctx-locks/<md5-of-project-path>` (ephemeral, no project pollution).
+- When on, core context is also injected once at **session start** via the `SessionStart` hook.
 - When on, every prompt receives:
   1. All files from `.claude/core/` (always)
   2. Matching files from `.claude/conditional/` based on keyword classification of the prompt
@@ -48,11 +49,15 @@ The script:
 
 ### Manual
 
-**1. Copy the hook:**
+**1. Copy the hooks:**
 ```bash
 mkdir -p ~/.claude/plugins/context-injector/hooks
 cp hooks/user-prompt-submit.sh ~/.claude/plugins/context-injector/hooks/
+cp hooks/pre-tool-use.sh ~/.claude/plugins/context-injector/hooks/
+cp hooks/session-start.sh ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
 ```
 
 **2. Copy the `/ctx` command:**
@@ -60,14 +65,34 @@ chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
 cp commands/ctx.md ~/.claude/commands/ctx.md
 ```
 
-**3. Wire the hook in your project's `.claude/settings.json`:**
+**3. Wire the hooks in your project's `.claude/settings.json`:**
 ```json
+"SessionStart": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"
+      }
+    ]
+  }
+],
 "UserPromptSubmit": [
   {
     "hooks": [
       {
         "type": "command",
         "command": "~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh"
+      }
+    ]
+  }
+],
+"PreToolUse": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "~/.claude/plugins/context-injector/hooks/pre-tool-use.sh"
       }
     ]
   }
