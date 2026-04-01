@@ -19,7 +19,34 @@ A Claude Code plugin that auto-injects core + classified conditional context int
 | review, pr, diff, check, feedback, critique, approve | code-review |
 | verify, audit, scan, lint, sweep, validate, ensure, confirm, gate, black, lint-imports | testing-patterns, tools-skills |
 
+## Requirements
+
+- [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
+- `jq` (for the automated installer)
+- `md5` (macOS built-in; on Linux use `md5sum` — see note below)
+
+> **Linux note:** The hook and command use `md5` (macOS). On Linux, replace `md5` with `md5sum | cut -d' ' -f1` in both `hooks/user-prompt-submit.sh` and `commands/ctx.md`.
+
 ## Installation
+
+### Automated (requires jq)
+
+Run from the root of the project you want to wire:
+
+```bash
+git clone <repo-url> context-injector
+cd /path/to/your/project
+/path/to/context-injector/install.sh
+```
+
+The script:
+- Copies the hook to `~/.claude/plugins/context-injector/hooks/`
+- Copies the `/ctx` command to `~/.claude/commands/`
+- Wires the `UserPromptSubmit` hook in `.claude/settings.json`
+- Adds the required Bash permission entries
+- Is idempotent — safe to run multiple times
+
+### Manual
 
 **1. Copy the hook:**
 ```bash
@@ -47,7 +74,7 @@ cp commands/ctx.md ~/.claude/commands/ctx.md
 ]
 ```
 
-**4. Add allow entries for the toggle commands:**
+**4. Add allow entries to `permissions.allow` in `.claude/settings.json`:**
 ```json
 "Bash(mkdir:/tmp/ctx-locks)",
 "Bash(touch:/tmp/ctx-locks/*)",
