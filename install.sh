@@ -21,10 +21,12 @@ if [ ! -d "$PROJECT_DIR/.claude" ]; then
 fi
 
 # --- install global files ---
-echo "Installing hook..."
+echo "Installing hooks..."
 mkdir -p ~/.claude/plugins/context-injector/hooks
 cp "$PLUGIN_DIR/hooks/user-prompt-submit.sh" ~/.claude/plugins/context-injector/hooks/
+cp "$PLUGIN_DIR/hooks/pre-tool-use.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
 
 echo "Installing /ctx command..."
 cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
@@ -44,6 +46,18 @@ if [ "$ALREADY_WIRED" = "false" ]; then
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
   echo "UserPromptSubmit hook already wired, skipping."
+fi
+
+# --- wire PreToolUse hook (idempotent) ---
+ALREADY_WIRED=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
+if [ "$ALREADY_WIRED" = "false" ]; then
+  echo "Wiring PreToolUse hook..."
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/pre-tool-use.sh"}]}'
+  jq --argjson entry "$HOOK_ENTRY" \
+    '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [$entry])' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+else
+  echo "PreToolUse hook already wired, skipping."
 fi
 
 # --- add Bash permissions (idempotent via unique) ---
