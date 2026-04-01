@@ -81,6 +81,10 @@ cp commands/ctx.md ~/.claude/commands/ctx.md
 "Bash(rm:/tmp/ctx-locks/*)"
 ```
 
+## License
+
+[MIT](LICENSE.md)
+
 ## Project convention
 
 Each project provides its own context files:
