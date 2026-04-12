@@ -28,14 +28,28 @@ case "$COMMAND" in
 esac
 
 # Extract tool response to determine pass/fail
-# PostToolUse events include tool_response with the output
+# PostToolUse events include tool_response — structure varies by tool.
+# Try multiple known field names; fall back to stringifying the whole response.
 TOOL_RESPONSE=$(printf '%s' "$INPUT" | python3 -c "
 import sys, json
 event = json.load(sys.stdin)
 resp = event.get('tool_response', '')
 if isinstance(resp, dict):
-    resp = resp.get('stdout', '') + resp.get('stderr', '')
-print(resp)
+    # Try known field names for Bash output
+    parts = []
+    for key in ('stdout', 'stderr', 'output', 'content', 'result', 'text'):
+        v = resp.get(key, '')
+        if v:
+            parts.append(str(v))
+    if parts:
+        print('\n'.join(parts))
+    else:
+        # Fallback: stringify the whole dict so grep can match
+        print(json.dumps(resp))
+elif isinstance(resp, str):
+    print(resp)
+else:
+    print(str(resp))
 " 2>/dev/null)
 
 # Determine pytest result from output

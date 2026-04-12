@@ -162,6 +162,118 @@ class TestStatePersistence:
         assert state["inner_state"] == "fixing_tests"
 
 
+class TestTranscriptPytestDetection:
+    """Tests for detecting pytest results from transcript (PreToolUse fallback)."""
+
+    def _write_transcript(self, tmp_path, tool_use_id, command, output):
+        """Helper to write a minimal transcript matching real Claude Code format.
+
+        Real format:
+        - Tool uses: {"type": "assistant", "message": {"content": [{"type": "tool_use", ...}]}}
+        - Tool results: {"type": "user", "message": {"content": [{"type": "tool_result", ...}]}}
+        """
+        transcript = tmp_path / "transcript.jsonl"
+        # Assistant message with tool_use
+        assistant_msg = json.dumps({
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "tool_use",
+                "id": tool_use_id,
+                "name": "Bash",
+                "input": {"command": command},
+            }]},
+        })
+        # Tool result inside a user message
+        result_msg = json.dumps({
+            "type": "user",
+            "message": {"content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": output,
+            }]},
+        })
+        transcript.write_text(assistant_msg + "\n" + result_msg + "\n")
+        return str(transcript)
+
+    def test_pytest_fail_detected_from_transcript(self, governor_v2, tmp_path):
+        transcript = self._write_transcript(
+            tmp_path, "tool_1", "python3 -m pytest test_foo.py -v",
+            "FAILED test_foo.py::test_add - AssertionError\n1 failed",
+        )
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        # Should have transitioned: writing_tests → red → fixing_tests
+        assert result["current_state"] == "fixing_tests"
+
+    def test_pytest_pass_detected_from_transcript(self, governor_v2, tmp_path):
+        transcript = self._write_transcript(
+            tmp_path, "tool_2", "pytest test_bar.py",
+            "1 passed in 0.02s",
+        )
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/bar.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        # writing_tests → green → writing_tests (cycle back)
+        assert result["current_state"] == "writing_tests"
+
+    def test_non_pytest_bash_ignored(self, governor_v2, tmp_path):
+        transcript = self._write_transcript(
+            tmp_path, "tool_3", "ls -la",
+            "total 0\ndrwxr-xr-x  2 user  staff  64 Apr 13 03:00 .",
+        )
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        assert result["current_state"] == "writing_tests"
+
+    def test_same_pytest_result_not_processed_twice(self, governor_v2, tmp_path):
+        transcript = self._write_transcript(
+            tmp_path, "tool_4", "pytest test_foo.py",
+            "FAILED test_foo.py::test_add\n1 failed",
+        )
+        # First eval: transitions to fixing_tests
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        assert result["current_state"] == "fixing_tests"
+
+        # Second eval with same transcript: should NOT re-process
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        assert result["current_state"] == "fixing_tests"
+
+    def test_pytest_error_detected_as_fail(self, governor_v2, tmp_path):
+        """Collection errors (exit code 2) should count as pytest_fail."""
+        transcript = self._write_transcript(
+            tmp_path, "tool_5", "python3 -m pytest test_hello.py -v 2>&1",
+            "ERROR collecting test_hello.py\nImportError\n1 error",
+        )
+        result = governor_v2.evaluate({
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "v2-session",
+            "transcript_path": transcript,
+        })
+        assert result["current_state"] == "fixing_tests"
+
+
 class TestAuditTrail:
     def test_auto_transition_creates_audit_entries(self, governor_v2, tmp_audit_dir):
         """Auto-transition should write audit entries for both transitions."""

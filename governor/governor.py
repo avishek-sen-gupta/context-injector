@@ -69,6 +69,13 @@ class Governor:
         tool_input = event.get("tool_input", {})
         timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
+        # Check transcript for unprocessed pytest results and fire transitions.
+        # This is needed because PostToolUse doesn't fire for non-zero exit codes,
+        # so we detect pytest results here in PreToolUse instead.
+        transcript_path = event.get("transcript_path")
+        if transcript_path:
+            self._check_transcript_for_pytest(transcript_path, timestamp)
+
         from_state = self.machine.current_state_name
 
         # Check for DeclarePhase pattern
@@ -305,6 +312,119 @@ class Governor:
             f"No valid transition from '{self.machine.current_state_name}' to '{target_phase}'. "
             f"Available transitions: {', '.join(self.machine.available_transition_names)}.",
         )
+
+    def _check_transcript_for_pytest(self, transcript_path: str, timestamp: str) -> None:
+        """Scan transcript for unprocessed pytest results and fire transitions.
+
+        PostToolUse hooks don't fire for non-zero Bash exit codes, so we detect
+        pytest pass/fail here by reading the transcript JSONL backwards to find
+        the most recent Bash tool result containing pytest output.
+
+        Claude Code transcript format:
+        - Tool uses: type=assistant, message.content[].type=tool_use (id, name, input)
+        - Tool results: type=user, message.content[].type=tool_result (tool_use_id, content)
+
+        Uses a marker file to avoid re-processing the same result.
+        """
+        if not os.path.exists(transcript_path):
+            return
+
+        marker_file = os.path.join(self.state_dir, f"{self.project_hash}.last_pytest_line")
+        last_processed_line = 0
+        if os.path.exists(marker_file):
+            try:
+                last_processed_line = int(open(marker_file).read().strip())
+            except (ValueError, OSError):
+                pass
+
+        try:
+            with open(transcript_path) as f:
+                lines = f.readlines()
+        except OSError:
+            return
+
+        # First pass: index tool_use blocks by id → command
+        # so we can look up whether a tool_result's corresponding call was pytest
+        tool_use_commands: dict[str, str] = {}
+        for line in lines:
+            try:
+                entry = json.loads(line)
+            except (json.JSONDecodeError, IndexError):
+                continue
+            if entry.get("type") != "assistant":
+                continue
+            for block in entry.get("message", {}).get("content", []):
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "tool_use"
+                    and block.get("name") == "Bash"
+                ):
+                    cmd = block.get("input", {}).get("command", "")
+                    tool_use_commands[block.get("id", "")] = cmd
+
+        # Scan backwards for the most recent tool_result that corresponds to a pytest call
+        for line_num in range(len(lines) - 1, -1, -1):
+            if line_num <= last_processed_line:
+                break
+            try:
+                entry = json.loads(lines[line_num])
+            except (json.JSONDecodeError, IndexError):
+                continue
+
+            # Tool results live inside "user" entries → message.content[]
+            if entry.get("type") != "user":
+                continue
+
+            for block in entry.get("message", {}).get("content", []):
+                if not isinstance(block, dict) or block.get("type") != "tool_result":
+                    continue
+
+                tool_use_id = block.get("tool_use_id", "")
+                cmd = tool_use_commands.get(tool_use_id, "")
+                if not re.search(r'\bpytest\b', cmd):
+                    continue
+
+                # Extract output text from the tool_result content
+                content = block.get("content", "")
+                if isinstance(content, list):
+                    content = " ".join(
+                        c.get("text", "") for c in content if isinstance(c, dict)
+                    )
+                if not isinstance(content, str):
+                    continue
+
+                # Determine pass/fail
+                event_name = None
+                if re.search(r'(FAILED|ERROR|failed|error.*occurred)', content):
+                    event_name = "pytest_fail"
+                elif re.search(r'(passed|no tests ran)', content):
+                    event_name = "pytest_pass"
+
+                if event_name:
+                    # Mark as processed
+                    try:
+                        with open(marker_file, "w") as f:
+                            f.write(str(line_num))
+                    except OSError:
+                        pass
+
+                    # Fire the transition and auto-advance
+                    send = getattr(self.machine, event_name, None)
+                    if send:
+                        try:
+                            send()
+                            auto_transitions = getattr(self.machine, "AUTO_TRANSITIONS", {})
+                            mid_state = self.machine.current_state_name
+                            while mid_state in auto_transitions:
+                                auto_event = auto_transitions[mid_state]
+                                auto_send = getattr(self.machine, auto_event)
+                                auto_send()
+                                mid_state = self.machine.current_state_name
+                            self._persist_state(mid_state, timestamp)
+                            self._recent_tools = []
+                        except Exception:
+                            pass
+                return  # Only process the most recent pytest result
 
     def _check_preconditions(self, required_patterns: list[str]) -> bool:
         """Check if any recent tool use matches at least one required pattern."""
