@@ -29,10 +29,10 @@ class GovernedMachine(StateMachine):
     @property
     def current_state_name(self) -> str:
         """Return the name of the current state."""
-        return self.current_state.id
+        return self.current_state_value
 
     @property
     def available_transition_names(self) -> list[str]:
         """Return names of transitions available from the current state."""
-        state = self.current_state
+        state = self.states_map[self.current_state_value]
         return [t.event for t in state.transitions if t.source.id == state.id]
