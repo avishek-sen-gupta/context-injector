@@ -21,7 +21,14 @@ export CTX_STATE_DIR="/tmp/ctx-state"
 export CTX_AUDIT_DIR="$PWD/.claude/audit"
 export CTX_CONTEXT_DIR="$PWD/.claude"
 export CTX_PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
-export CTX_MACHINE="${CTX_MACHINE:-machines.tdd_cycle.TDDCycle}"
+
+# Read machine config: file > env > default
+MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"
+if [ -f "$MACHINE_FILE" ]; then
+  export CTX_MACHINE="$(cat "$MACHINE_FILE")"
+else
+  export CTX_MACHINE="${CTX_MACHINE:-machines.tdd_cycle.TDDCycle}"
+fi
 
 # Run governor
 RESPONSE=$(printf '%s' "$INPUT" | python3 "$GOVERNOR" 2>/dev/null)

@@ -42,8 +42,9 @@ chmod +x ~/.claude/plugins/context-injector/hooks/governor-hook.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/session-start-v2.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/pre-compact.sh
 
-echo "Installing /ctx command..."
+echo "Installing commands..."
 cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
+cp "$PLUGIN_DIR/commands/governor.md" ~/.claude/commands/governor.md
 
 echo "Installing governor..."
 mkdir -p "$GOVERNOR_DIR"

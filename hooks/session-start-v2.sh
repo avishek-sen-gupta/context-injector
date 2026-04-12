@@ -16,10 +16,18 @@ STATE_FILE="$STATE_DIR/$PROJECT_HASH.json"
 mkdir -p "$STATE_DIR"
 mkdir -p "$PWD/.claude/audit"
 
+# Read active machine config
+MACHINE_FILE="$STATE_DIR/$PROJECT_HASH.machine"
+if [ -f "$MACHINE_FILE" ]; then
+  ACTIVE_MACHINE="$(cat "$MACHINE_FILE")"
+else
+  ACTIVE_MACHINE="machines.tdd_cycle.TDDCycle"
+fi
+
 # Reset state file for new session (fresh start)
 rm -f "$STATE_FILE"
 
-echo "[ctx: governor mode — state machine initialized]"
+echo "[ctx: governor mode — machine=$ACTIVE_MACHINE — initialized]"
 echo ""
 
 # Inject core context
