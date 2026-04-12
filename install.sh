@@ -29,20 +29,10 @@ fi
 # --- install global files ---
 echo "Installing hooks..."
 mkdir -p ~/.claude/plugins/context-injector/hooks
-cp "$PLUGIN_DIR/hooks/user-prompt-submit.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/pre-tool-use.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/session-start.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/governor-hook.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/session-start-v2.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/pre-compact.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/post-tool-use.sh" ~/.claude/plugins/context-injector/hooks/
-chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/governor-hook.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/session-start-v2.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/pre-compact.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/post-tool-use.sh
+for hook in user-prompt-submit.sh governor-hook.sh session-start-v2.sh post-tool-use.sh pre-compact.sh; do
+  cp "$PLUGIN_DIR/hooks/$hook" ~/.claude/plugins/context-injector/hooks/
+  chmod +x ~/.claude/plugins/context-injector/hooks/"$hook"
+done
 
 echo "Installing commands..."
 cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
@@ -81,36 +71,28 @@ else
   echo "UserPromptSubmit hook already wired, skipping."
 fi
 
-# --- wire SessionStart hook (v2 governor, upgrades v1) ---
-HAS_V2_SESSION=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("session-start-v2"))' "$SETTINGS")
-if [ "$HAS_V2_SESSION" = "false" ]; then
-  echo "Wiring SessionStart hook (v2)..."
-  # Remove v1 session-start hook if present
-  jq '.hooks.SessionStart = [(.hooks.SessionStart // [])[] | select(.hooks[0].command | contains("session-start-v2") or (contains("context-injector") | not))]' \
-    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  # Add v2 hook
+# --- wire SessionStart hook (idempotent) ---
+HAS_SESSION=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("session-start-v2"))' "$SETTINGS")
+if [ "$HAS_SESSION" = "false" ]; then
+  echo "Wiring SessionStart hook..."
   HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start-v2.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
     '.hooks.SessionStart = ((.hooks.SessionStart // []) + [$entry])' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
-  echo "SessionStart v2 hook already wired, skipping."
+  echo "SessionStart hook already wired, skipping."
 fi
 
-# --- wire PreToolUse hook (v2 governor, upgrades v1) ---
-HAS_GOVERNOR=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("governor-hook"))' "$SETTINGS")
-if [ "$HAS_GOVERNOR" = "false" ]; then
-  echo "Wiring PreToolUse hook (governor)..."
-  # Remove v1 pre-tool-use hook if present
-  jq '.hooks.PreToolUse = [(.hooks.PreToolUse // [])[] | select(.hooks[0].command | contains("governor-hook") or (contains("context-injector") | not))]' \
-    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  # Add governor hook
+# --- wire PreToolUse hook (idempotent) ---
+HAS_PRETOOL=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("governor-hook"))' "$SETTINGS")
+if [ "$HAS_PRETOOL" = "false" ]; then
+  echo "Wiring PreToolUse hook..."
   HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/governor-hook.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
     '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [$entry])' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
-  echo "PreToolUse governor hook already wired, skipping."
+  echo "PreToolUse hook already wired, skipping."
 fi
 
 # --- wire PostToolUse hook (idempotent) ---

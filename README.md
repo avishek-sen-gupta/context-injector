@@ -41,9 +41,10 @@ cd /path/to/your/project
 ```
 
 The script:
-- Copies the hook to `~/.claude/plugins/context-injector/hooks/`
-- Copies the `/ctx` command to `~/.claude/commands/`
-- Wires the `UserPromptSubmit` hook in `.claude/settings.json`
+- Copies hooks to `~/.claude/plugins/context-injector/hooks/`
+- Copies the governor and machine definitions to `~/.claude/plugins/context-injector/`
+- Copies `/ctx` and `/governor` commands to `~/.claude/commands/`
+- Wires all hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`) in `.claude/settings.json`
 - Adds the required Bash permission entries
 - Is idempotent — safe to run multiple times
 
@@ -52,91 +53,132 @@ The script:
 **1. Copy the hooks:**
 ```bash
 mkdir -p ~/.claude/plugins/context-injector/hooks
-cp hooks/user-prompt-submit.sh ~/.claude/plugins/context-injector/hooks/
-cp hooks/pre-tool-use.sh ~/.claude/plugins/context-injector/hooks/
-cp hooks/session-start.sh ~/.claude/plugins/context-injector/hooks/
-chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
+for f in user-prompt-submit.sh governor-hook.sh session-start-v2.sh post-tool-use.sh pre-compact.sh; do
+  cp "hooks/$f" ~/.claude/plugins/context-injector/hooks/
+  chmod +x ~/.claude/plugins/context-injector/hooks/"$f"
+done
 ```
 
-**2. Copy the `/ctx` command:**
+**2. Copy the governor and machines:**
+```bash
+mkdir -p ~/.claude/plugins/context-injector/{governor,machines}
+cp governor/*.py ~/.claude/plugins/context-injector/governor/
+cp machines/*.py ~/.claude/plugins/context-injector/machines/
+```
+
+**3. Copy commands:**
 ```bash
 cp commands/ctx.md ~/.claude/commands/ctx.md
+cp commands/governor.md ~/.claude/commands/governor.md
 ```
 
-**3. Wire the hooks in your project's `.claude/settings.json`:**
+**4. Wire the hooks in your project's `.claude/settings.json`:**
 ```json
-"SessionStart": [
-  {
-    "hooks": [
-      {
-        "type": "command",
-        "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"
-      }
-    ]
-  }
-],
-"UserPromptSubmit": [
-  {
-    "hooks": [
-      {
-        "type": "command",
-        "command": "~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh"
-      }
-    ]
-  }
-],
-"PreToolUse": [
-  {
-    "hooks": [
-      {
-        "type": "command",
-        "command": "~/.claude/plugins/context-injector/hooks/pre-tool-use.sh"
-      }
-    ]
-  }
-]
+"hooks": {
+  "SessionStart": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start-v2.sh"}]}
+  ],
+  "UserPromptSubmit": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh"}]}
+  ],
+  "PreToolUse": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/governor-hook.sh"}]}
+  ],
+  "PostToolUse": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/post-tool-use.sh"}]}
+  ],
+  "PreCompact": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/pre-compact.sh"}]}
+  ]
+}
 ```
 
-**4. Add allow entries to `permissions.allow` in `.claude/settings.json`:**
+**5. Add allow entries to `permissions.allow` in `.claude/settings.json`:**
 ```json
 "Bash(mkdir:/tmp/ctx-locks)",
 "Bash(touch:/tmp/ctx-locks/*)",
 "Bash(rm:/tmp/ctx-locks/*)"
 ```
 
-## v2: State Machine Governor
+### Uninstall
 
-The governor mode replaces keyword-based classification with a state machine that tracks Claude's workflow phase, injects context based on current state, enforces transitions with configurable softness, and produces an audit trail.
+Run from the root of the project you want to unwire:
+
+```bash
+/path/to/context-injector/uninstall.sh
+```
+
+This removes all hooks from `.claude/settings.json`, deletes the plugin directory, commands, and state files.
+
+## v2: State Machine Governor (TDD)
+
+The governor replaces keyword-based classification with an enforced TDD state machine. It tracks Claude's workflow phase, blocks disallowed tools, automatically transitions based on pytest results, injects context per state, and produces an audit trail.
 
 ### How it works
 
-1. **SessionStart** initializes the state machine and injects DeclarePhase instructions
-2. **PreToolUse** runs the governor on every tool call — it checks the tool against allowed-tools for the current state and detects phase declarations
-3. **PreCompact** re-injects state context before conversation compaction so invariants survive compression
-4. Claude announces transitions by running: `echo '{"declare_phase": "<phase>", "reason": "<why>"}'`
-5. The governor validates the transition, applies a graduated response based on softness, injects context files for the new state, and writes an audit entry
+1. **SessionStart** (`session-start-v2.sh`) initializes the state machine and injects TDD workflow instructions
+2. **PreToolUse** (`governor-hook.sh`) runs the governor on every tool call — checks the tool against blocked-tools for the current state, and scans the conversation transcript for unprocessed pytest results
+3. **PostToolUse** (`post-tool-use.sh`) detects pytest pass/fail from Bash tool output and fires state transitions
+4. **PreCompact** (`pre-compact.sh`) re-injects state context before conversation compaction so invariants survive compression
+
+Transitions are **automatic** — driven by pytest results, not manual declarations.
+
+### TDD cycle
+
+```
+writing_tests → (pytest fails) → red → (auto) → fixing_tests
+                                                       ↓
+writing_tests ← (auto) ← green ← (pytest passes) ←───┘
+```
+
+- **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited.
+- **red**: Transient — auto-advances to `fixing_tests`.
+- **fixing_tests**: Write production code to make tests pass. All files editable.
+- **green**: Transient — auto-advances back to `writing_tests`.
+
+### Pytest detection
+
+The governor detects pytest results through two mechanisms:
+
+1. **PostToolUse hook**: Fires after successful Bash commands (`exit 0`). Parses the tool output for pytest summary patterns (`FAILED`, `passed`, etc.) and triggers the appropriate state transition.
+2. **Transcript scanning** (PreToolUse fallback): PostToolUse hooks do **not** fire for non-zero Bash exit codes, so pytest failures (`exit 1`) and collection errors (`exit 2`) are invisible to PostToolUse. As a fallback, the governor scans the Claude Code conversation transcript (JSONL) on every PreToolUse call, looking for unprocessed pytest results. A marker file prevents re-processing the same result.
+
+### Tool blocking
+
+The governor uses a **blocklist** approach. Tools not listed are allowed. Each state defines which tools are blocked, with `!` prefix exceptions:
+
+| State | Blocked | Exceptions |
+|---|---|---|
+| `writing_tests` | `Write`, `Edit` | `!Write(test_*)`, `!Edit(test_*)` |
+| `red` | `Write`, `Edit` | — |
+| `fixing_tests` | *(none)* | — |
+| `green` | `Write`, `Edit` | — |
+
+Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are always allowed in all states.
 
 ### Graduated response
 
-Each transition has a **softness** value (0.0–1.0) controlling how the governor responds:
+When a blocked tool is used, the governor applies a graduated response based on the transition's **softness** value (0.0–1.0):
 
 | Softness | Action | Behavior |
 |---|---|---|
-| ≥ 0.7 | allow | Transition proceeds silently |
-| 0.3–0.7 | remind | Transition proceeds with a deviation warning |
-| < 0.3 | challenge | Transition proceeds but Claude is asked to justify |
+| >= 0.7 | allow | Proceeds silently |
+| 0.3–0.7 | remind | Proceeds with a deviation warning |
+| < 0.3 | challenge | Proceeds but Claude is asked to justify |
 
 ### Built-in machines
 
-**TDDCycle** (`machines.tdd_cycle.TDDCycle`) — the default:
+**TDDv2** (`machines.tdd_v2.TDDv2`) — the default:
+- States: `writing_tests` → `red` → `fixing_tests` → `green` → `writing_tests`
+- Pytest-driven transitions with auto-advancing transient states
+- Blocklist-based tool restrictions
+
+**TDDCycle** (`machines.tdd_cycle.TDDCycle`) — legacy:
 - States: `red` → `green` → `refactor` (+ `docs_detour`)
-- Enforces test-first development with tool restrictions per state (e.g., only test files editable in `red`)
+- Declaration-based transitions, allowlist-based tool restrictions
 
 **FeatureDevelopment** (`machines.feature_development.FeatureDevelopment`):
 - States: `planning` → `implementing` → `reviewing` → `committing`
-- Delegates `implementing` to a TDDCycle sub-machine
 
 ### Defining custom machines
 
@@ -157,9 +199,17 @@ class MyWorkflow(GovernedMachine):
         "step_a": ["core/*"],
         "step_b": ["conditional/review.md"],
     }
-    ALLOWED_TOOLS = {
-        "step_a": ["Edit", "Write"],
-        "step_b": ["Read", "Grep"],
+    BLOCKED_TOOLS = {
+        "step_a": ["Write", "Edit"],
+        "step_b": [],
+    }
+    # Optional: auto-advance transient states
+    AUTO_TRANSITIONS = {
+        "step_b": "some_event",
+    }
+    # Optional: require tools to have been used before a transition
+    PRECONDITIONS = {
+        "advance": ["Bash(pytest*)"],
     }
 ```
 
@@ -169,7 +219,7 @@ Place it in `machines/` and set `CTX_MACHINE` to its dotted path (e.g., `machine
 
 | Variable | Default | Description |
 |---|---|---|
-| `CTX_MACHINE` | `machines.tdd_cycle.TDDCycle` | Dotted path to the state machine class |
+| `CTX_MACHINE` | `machines.tdd_v2.TDDv2` | Dotted path to the state machine class |
 | `CTX_STATE_DIR` | `/tmp/ctx-state` | Directory for persisted state files |
 | `CTX_AUDIT_DIR` | `$PWD/.claude/audit` | Directory for JSONL audit logs |
 | `CTX_CONTEXT_DIR` | `$PWD/.claude` | Base directory for context file resolution |
@@ -181,9 +231,10 @@ Each governor evaluation appends a JSON line to `$CTX_AUDIT_DIR/<session_id>.jso
 
 ### Migration from v1
 
-v1 hooks (keyword-based `UserPromptSubmit`, `PreToolUse`, `SessionStart`) are preserved. The governor adds three new hooks alongside them:
-- `governor-hook.sh` (PreToolUse) — state machine evaluation
+v1 hooks (keyword-based `UserPromptSubmit`, `PreToolUse`, `SessionStart`) are preserved. The governor adds new hooks alongside them:
+- `governor-hook.sh` (PreToolUse) — state machine evaluation + transcript scanning
 - `session-start-v2.sh` (SessionStart) — state machine initialization
+- `post-tool-use.sh` (PostToolUse) — pytest result detection
 - `pre-compact.sh` (PreCompact) — compaction survival
 
 Both v1 and v2 hooks check the same lockfile (`/tmp/ctx-locks/<hash>`), so `/ctx on|off` controls both. To use v2, run `install.sh` — it installs all hooks and wires them into `.claude/settings.json`.
