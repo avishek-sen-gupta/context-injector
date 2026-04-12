@@ -52,6 +52,7 @@ class Governor:
         if saved_state and saved_state != self.machine.current_state_name:
             self._restore_machine_state(saved_state)
         self._last_injected_state = persisted.get("last_injected_state")
+        self._recent_tools: list[str] = persisted.get("recent_tools", [])
 
     def _restore_machine_state(self, target_state: str) -> None:
         """Attempt to restore machine to a previously persisted state.
@@ -84,6 +85,15 @@ class Governor:
                 declaration
             )
         else:
+            # Track this tool use for precondition checking
+            if tool_name == "Bash":
+                command = tool_input.get("command", "")
+                tool_sig = f"Bash({command})"
+            else:
+                file_path = tool_input.get("file_path", "")
+                tool_sig = f"{tool_name}({os.path.basename(file_path)})"
+            self._recent_tools.append(tool_sig)
+
             action, message = self._check_tool_against_state(tool_name, tool_input)
 
         to_state = self.machine.current_state_name
@@ -160,13 +170,27 @@ class Governor:
                 continue
             if transition.target.id == target_phase:
                 transition_name = transition.event
+
+                # Check preconditions before allowing the transition
+                preconditions = self.machine.get_preconditions(transition_name)
+                if preconditions and not self._check_preconditions(preconditions):
+                    return (
+                        transition_name,
+                        0.0,
+                        "challenge",
+                        f"Precondition not met for '{transition_name}': expected one of "
+                        f"{preconditions} in recent tool usage, but none found. "
+                        f"Complete the required work before declaring this transition.",
+                    )
+
                 softness = self.machine.get_softness(transition_name)
                 action, message = self._graduated_response(softness, transition_name, target_phase)
 
-                # Execute the transition if allowed
+                # Execute the transition if allowed, reset recent tools
                 if action in ("allow", "remind"):
                     send = getattr(self.machine, transition_name)
                     send()
+                    self._recent_tools = []
 
                 return transition_name, softness, action, message
 
@@ -178,6 +202,14 @@ class Governor:
             f"No valid transition from '{self.machine.current_state_name}' to '{target_phase}'. "
             f"Available transitions: {', '.join(self.machine.available_transition_names)}.",
         )
+
+    def _check_preconditions(self, required_patterns: list[str]) -> bool:
+        """Check if any recent tool use matches at least one required pattern."""
+        for tool_sig in self._recent_tools:
+            for pattern in required_patterns:
+                if fnmatch.fnmatch(tool_sig, pattern):
+                    return True
+        return False
 
     def _graduated_response(
         self, softness: float, transition_name: str, target_phase: str
@@ -254,6 +286,7 @@ class Governor:
             "last_injected_state": self._last_injected_state,
             "last_injection_timestamp": timestamp,
             "session_id": self.session_id,
+            "recent_tools": self._recent_tools,
         }
         save_state(self._state_file, state)
 

@@ -73,3 +73,32 @@ def test_available_transition_names():
     names = sm.available_transition_names
     assert "go" in names
     assert "back" not in names  # can't go back from alpha
+
+
+class MachineWithPreconditions(GovernedMachine):
+    """Machine with preconditions for testing."""
+
+    alpha = State(initial=True)
+    beta = State()
+
+    go = alpha.to(beta)
+    back = beta.to(alpha)
+
+    PRECONDITIONS = {
+        "go": ["Write(test_*)", "Edit(test_*)"],
+    }
+
+
+def test_get_preconditions_returns_patterns():
+    sm = MachineWithPreconditions()
+    assert sm.get_preconditions("go") == ["Write(test_*)", "Edit(test_*)"]
+
+
+def test_get_preconditions_returns_empty_for_unknown():
+    sm = MachineWithPreconditions()
+    assert sm.get_preconditions("back") == []
+
+
+def test_get_preconditions_returns_empty_when_not_defined():
+    sm = SimpleMachine()
+    assert sm.get_preconditions("go") == []

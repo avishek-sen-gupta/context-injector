@@ -55,3 +55,9 @@ class TDDCycle(GovernedMachine):
         "refactor": ["Edit", "Write", "Bash(pytest*)"],
         "docs_detour": ["Edit(*.md)", "Write(*.md)"],
     }
+
+    PRECONDITIONS = {
+        "test_written": ["Write(test_*)", "Edit(test_*)"],
+        "test_passes": ["Bash(pytest*)"],
+        "refactor_done": ["Edit(*)", "Write(*)"],
+    }

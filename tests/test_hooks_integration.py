@@ -55,17 +55,7 @@ def test_governor_cli_returns_json(mock_project):
 
 
 def test_governor_declaration_transition(mock_project):
-    """Test that a DeclarePhase event triggers a state transition."""
-    event = {
-        "event": "pre_tool_use",
-        "tool_name": "Bash",
-        "tool_input": {
-            "command": """echo '{"declare_phase": "green", "reason": "test confirmed failing"}'""",
-        },
-        "session_id": "integration-test-2",
-        "timestamp": "2026-04-12T12:00:00Z",
-    }
-
+    """Test that a DeclarePhase event triggers a state transition (with precondition met)."""
     env = os.environ.copy()
     env["CTX_STATE_DIR"] = os.path.join(mock_project, ".ctx-state")
     env["CTX_AUDIT_DIR"] = os.path.join(mock_project, ".ctx-audit")
@@ -75,17 +65,38 @@ def test_governor_declaration_transition(mock_project):
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    result = subprocess.run(
-        ["python3", "-m", "governor"],
-        input=json.dumps(event),
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=project_root,
-    )
+    def run_event(event):
+        result = subprocess.run(
+            ["python3", "-m", "governor"],
+            input=json.dumps(event),
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=project_root,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        return json.loads(result.stdout)
 
-    assert result.returncode == 0, f"stderr: {result.stderr}"
-    response = json.loads(result.stdout)
+    # First: write a test file to satisfy precondition
+    run_event({
+        "event": "pre_tool_use",
+        "tool_name": "Write",
+        "tool_input": {"file_path": "/project/tests/test_foo.py"},
+        "session_id": "integration-test-2",
+        "timestamp": "2026-04-12T11:59:00Z",
+    })
+
+    # Now declare green
+    response = run_event({
+        "event": "pre_tool_use",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": """echo '{"declare_phase": "green", "reason": "test confirmed failing"}'""",
+        },
+        "session_id": "integration-test-2",
+        "timestamp": "2026-04-12T12:00:00Z",
+    })
+
     assert response["current_state"] == "green"
     assert response["transition"] == "red -> green"
 
@@ -115,16 +126,16 @@ def test_full_tdd_cycle_sequence(mock_project):
         assert result.returncode == 0, f"stderr: {result.stderr}"
         return json.loads(result.stdout)
 
-    # 1. Start in red — edit a test file (allowed)
+    # 1. Start in red — write a test file (allowed, satisfies precondition)
     r = run_event({
-        "event": "pre_tool_use", "tool_name": "Edit",
+        "event": "pre_tool_use", "tool_name": "Write",
         "tool_input": {"file_path": "/p/tests/test_x.py"},
         "session_id": "e2e", "timestamp": "2026-04-12T12:00:00Z",
     })
     assert r["current_state"] == "red"
     assert r["action"] == "allow"
 
-    # 2. Declare green
+    # 2. Declare green (precondition: test file written above)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
         "tool_input": {"command": """echo '{"declare_phase": "green", "reason": "test failing"}'"""},
@@ -142,7 +153,15 @@ def test_full_tdd_cycle_sequence(mock_project):
     assert r["current_state"] == "green"
     assert r["action"] == "allow"
 
-    # 4. Declare refactor
+    # 3b. Run pytest (satisfies precondition for test_passes)
+    r = run_event({
+        "event": "pre_tool_use", "tool_name": "Bash",
+        "tool_input": {"command": "pytest tests/ -v"},
+        "session_id": "e2e", "timestamp": "2026-04-12T12:02:30Z",
+    })
+    assert r["current_state"] == "green"
+
+    # 4. Declare refactor (precondition: pytest run above)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
         "tool_input": {"command": """echo '{"declare_phase": "refactor", "reason": "tests pass"}'"""},
@@ -150,7 +169,15 @@ def test_full_tdd_cycle_sequence(mock_project):
     })
     assert r["current_state"] == "refactor"
 
-    # 5. Declare back to red
+    # 4b. Edit a file (satisfies precondition for refactor_done)
+    r = run_event({
+        "event": "pre_tool_use", "tool_name": "Edit",
+        "tool_input": {"file_path": "/p/src/auth.py"},
+        "session_id": "e2e", "timestamp": "2026-04-12T12:03:30Z",
+    })
+    assert r["current_state"] == "refactor"
+
+    # 5. Declare back to red (precondition: edit above)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
         "tool_input": {"command": """echo '{"declare_phase": "red", "reason": "refactor done"}'"""},
@@ -163,7 +190,7 @@ def test_full_tdd_cycle_sequence(mock_project):
     assert os.path.exists(audit_file)
     with open(audit_file) as f:
         entries = [json.loads(line) for line in f if line.strip()]
-    assert len(entries) == 5
+    assert len(entries) == 7
     assert entries[0]["from_state"] == "red"
     assert entries[1]["to_state"] == "green"
-    assert entries[4]["to_state"] == "red"
+    assert entries[6]["to_state"] == "red"

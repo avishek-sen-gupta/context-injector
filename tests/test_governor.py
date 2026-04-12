@@ -57,6 +57,14 @@ class TestBasicEvaluation:
 
 class TestDeclarePhase:
     def test_declaration_triggers_transition(self, governor):
+        # Satisfy precondition: write a test file first
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T11:59:00Z",
+        })
         result = governor.evaluate({
             "event": "pre_tool_use",
             "tool_name": "Bash",
@@ -87,7 +95,14 @@ class TestDeclarePhase:
 
 class TestGraduatedResponse:
     def test_high_softness_allows_silently(self, governor):
-        # test_written is softness 1.0
+        # test_written is softness 1.0 — satisfy precondition first
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T11:59:00Z",
+        })
         result = governor.evaluate({
             "event": "pre_tool_use",
             "tool_name": "Bash",
@@ -117,6 +132,14 @@ class TestGraduatedResponse:
 
 class TestContextInjection:
     def test_context_included_on_state_change(self, governor):
+        # Satisfy precondition first
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T11:59:00Z",
+        })
         result = governor.evaluate({
             "event": "pre_tool_use",
             "tool_name": "Bash",
@@ -166,8 +189,151 @@ class TestAuditTrail:
         assert entry["tool_name"] == "Edit"
 
 
+class TestPreconditions:
+    def test_declaration_without_precondition_met_is_challenged(self, governor):
+        """Declaring green without having written a test file should be challenged."""
+        result = governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "skipping test"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        assert result["action"] == "challenge"
+        assert "precondition" in result["message"].lower() or "test" in result["message"].lower()
+        # Should NOT have transitioned
+        assert result["current_state"] == "red"
+
+    def test_declaration_with_precondition_met_is_allowed(self, governor):
+        """Declaring green after writing a test file should be allowed."""
+        # First: write a test file (satisfies precondition)
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        # Now declare green
+        result = governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "test confirmed failing"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:01:00Z",
+        })
+        assert result["action"] == "allow"
+        assert result["current_state"] == "green"
+
+    def test_recent_tools_reset_after_transition(self, governor):
+        """After transitioning, recent tools should reset so the next
+        transition requires fresh preconditions."""
+        # Write test file, declare green
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "test failing"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:01:00Z",
+        })
+        # Now in green. Declare refactor without running pytest — should challenge
+        result = governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "refactor", "reason": "tests pass"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:02:00Z",
+        })
+        assert result["action"] == "challenge"
+        assert result["current_state"] == "green"
+
+    def test_precondition_met_via_edit(self, governor):
+        """Edit(test_*) should also satisfy the precondition for test_written."""
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "/project/tests/test_bar.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        result = governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "test written"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:01:00Z",
+        })
+        assert result["action"] == "allow"
+        assert result["current_state"] == "green"
+
+    def test_no_preconditions_still_allows(self, governor):
+        """Transitions without preconditions should still work normally."""
+        # Write test, go to green
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "test failing"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:01:00Z",
+        })
+        # Run pytest (satisfies test_passes precondition)
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest tests/test_foo.py -v"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:02:00Z",
+        })
+        # Declare refactor — test_passes has precondition Bash(pytest*)
+        result = governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "refactor", "reason": "tests pass"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:03:00Z",
+        })
+        assert result["action"] == "allow"
+        assert result["current_state"] == "refactor"
+
+
 class TestStatePersistence:
     def test_state_persisted_after_transition(self, governor, tmp_state_dir):
+        # Satisfy precondition first
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T11:59:00Z",
+        })
         governor.evaluate({
             "event": "pre_tool_use",
             "tool_name": "Bash",

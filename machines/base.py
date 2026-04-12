@@ -13,6 +13,7 @@ class GovernedMachine(StateMachine):
     SOFTNESS: dict[str, float] = {}
     CONTEXT: dict[str, list[str]] = {}
     ALLOWED_TOOLS: dict[str, list[str]] = {}
+    PRECONDITIONS: dict[str, list[str]] = {}
 
     def get_softness(self, transition_name: str) -> float:
         """Return the softness value for a transition. Defaults to 1.0."""
@@ -25,6 +26,10 @@ class GovernedMachine(StateMachine):
     def get_allowed_tools(self, state_name: str) -> list[str] | None:
         """Return allowed tool patterns for a state. None if unconstrained."""
         return self.ALLOWED_TOOLS.get(state_name)
+
+    def get_preconditions(self, transition_name: str) -> list[str]:
+        """Return required tool patterns for a transition. Defaults to []."""
+        return self.PRECONDITIONS.get(transition_name, [])
 
     @property
     def current_state_name(self) -> str:

@@ -36,6 +36,12 @@ class FeatureDevelopment(GovernedMachine):
         "committing": ["core/*"],
     }
 
+    PRECONDITIONS = {
+        "begin_impl": ["Read(*)", "Bash(*)"],
+        "impl_complete": ["Edit(*)", "Write(*)"],
+        "review_passed": ["Read(*)", "Bash(*)"],
+    }
+
     # Maps state names to dotted-path sub-machine classes.
     # The governor instantiates these when entering the state.
     SUB_MACHINES = {
