@@ -1,0 +1,13 @@
+[project]
+name = "context-injector"
+version = "2.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "python-statemachine>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
