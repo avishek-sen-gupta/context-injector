@@ -2,16 +2,16 @@
 # governor-hook.sh — State Machine Governor PreToolUse hook.
 # Pipes tool event JSON to the Python governor process.
 # Outputs additionalContext based on governor response.
-# Exit 0 always — errors are silent no-ops.
+# Exit 0 = allow (advisory context), Exit 2 = block tool.
 
 LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
-GOVERNOR="$HOME/.claude/plugins/context-injector/governor/governor.py"
+PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 
 # Mode off — nothing to do
 [ -f "$LOCK" ] || exit 0
 
 # Governor not installed — fall back silently
-[ -f "$GOVERNOR" ] || exit 0
+[ -f "$PLUGIN_DIR/governor/governor.py" ] || exit 0
 
 # Read stdin (tool event JSON from Claude Code)
 INPUT=$(cat)
@@ -31,7 +31,7 @@ else
 fi
 
 # Run governor
-RESPONSE=$(printf '%s' "$INPUT" | python3 "$GOVERNOR" 2>/dev/null)
+RESPONSE=$(printf '%s' "$INPUT" | PYTHONPATH="$PLUGIN_DIR" python3 -m governor 2>/dev/null)
 
 # If governor failed, exit silently
 [ -z "$RESPONSE" ] && exit 0
