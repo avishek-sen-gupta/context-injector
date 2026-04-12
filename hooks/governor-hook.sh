@@ -27,7 +27,7 @@ MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"
 if [ -f "$MACHINE_FILE" ]; then
   export CTX_MACHINE="$(cat "$MACHINE_FILE")"
 else
-  export CTX_MACHINE="${CTX_MACHINE:-machines.tdd_cycle.TDDCycle}"
+  export CTX_MACHINE="${CTX_MACHINE:-machines.tdd_v2.TDDv2}"
 fi
 
 # Run governor

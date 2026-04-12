@@ -1,0 +1,165 @@
+import pytest
+from statemachine.exceptions import TransitionNotAllowed
+
+from machines.tdd_v2 import TDDv2
+
+
+class TestStates:
+    def test_initial_state_is_writing_tests(self):
+        sm = TDDv2()
+        assert sm.current_state_name == "writing_tests"
+
+    def test_four_states_exist(self):
+        sm = TDDv2()
+        state_names = {s.id for s in sm.states}
+        assert state_names == {"writing_tests", "red", "fixing_tests", "green"}
+
+
+class TestTransitions:
+    def test_writing_tests_to_red_on_pytest_fail(self):
+        sm = TDDv2()
+        sm.pytest_fail()
+        assert sm.current_state_name == "red"
+
+    def test_writing_tests_to_green_on_pytest_pass(self):
+        sm = TDDv2()
+        sm.pytest_pass()
+        assert sm.current_state_name == "green"
+
+    def test_red_to_fixing_tests(self):
+        sm = TDDv2()
+        sm.pytest_fail()  # → red
+        sm.start_fixing()
+        assert sm.current_state_name == "fixing_tests"
+
+    def test_fixing_tests_to_red_on_pytest_fail(self):
+        sm = TDDv2()
+        sm.pytest_fail()  # → red
+        sm.start_fixing()  # → fixing_tests
+        sm.pytest_fail()
+        assert sm.current_state_name == "red"
+
+    def test_fixing_tests_to_green_on_pytest_pass(self):
+        sm = TDDv2()
+        sm.pytest_fail()  # → red
+        sm.start_fixing()  # → fixing_tests
+        sm.pytest_pass()
+        assert sm.current_state_name == "green"
+
+    def test_green_to_writing_tests(self):
+        sm = TDDv2()
+        sm.pytest_pass()  # → green
+        sm.start_next_test()
+        assert sm.current_state_name == "writing_tests"
+
+    def test_full_cycle(self):
+        """WritingTests → RED → FixingTests → RED → FixingTests → GREEN → WritingTests"""
+        sm = TDDv2()
+        sm.pytest_fail()       # writing_tests → red
+        sm.start_fixing()      # red → fixing_tests
+        sm.pytest_fail()       # fixing_tests → red (still failing)
+        sm.start_fixing()      # red → fixing_tests (try again)
+        sm.pytest_pass()       # fixing_tests → green
+        sm.start_next_test()   # green → writing_tests
+        assert sm.current_state_name == "writing_tests"
+
+    def test_cannot_go_from_writing_tests_to_fixing_tests(self):
+        sm = TDDv2()
+        with pytest.raises(TransitionNotAllowed):
+            sm.start_fixing()
+
+    def test_cannot_go_from_red_to_green(self):
+        sm = TDDv2()
+        sm.pytest_fail()  # → red
+        with pytest.raises(TransitionNotAllowed):
+            sm.pytest_pass()
+
+    def test_cannot_go_from_fixing_tests_to_writing_tests(self):
+        sm = TDDv2()
+        sm.pytest_fail()
+        sm.start_fixing()
+        with pytest.raises(TransitionNotAllowed):
+            sm.start_next_test()
+
+
+class TestAllowedTools:
+    def test_writing_tests_only_allows_test_files(self):
+        sm = TDDv2()
+        allowed = sm.get_allowed_tools("writing_tests")
+        assert "Write(test_*)" in allowed
+        assert "Edit(test_*)" in allowed
+        assert "Read" in allowed
+        assert "Bash(pytest*)" in allowed
+
+    def test_red_allows_read_only(self):
+        """RED is transient — only Read and Bash allowed, no edits."""
+        sm = TDDv2()
+        allowed = sm.get_allowed_tools("red")
+        assert "Read" in allowed
+        assert allowed is not None
+        # No Write or Edit
+        for pattern in allowed:
+            assert not pattern.startswith("Write")
+            assert not pattern.startswith("Edit")
+
+    def test_fixing_tests_allows_production_code(self):
+        sm = TDDv2()
+        allowed = sm.get_allowed_tools("fixing_tests")
+        assert "Edit" in allowed
+        assert "Write" in allowed
+        assert "Bash(pytest*)" in allowed
+        assert "Read" in allowed
+
+    def test_green_allows_read_only(self):
+        """GREEN is transient — only Read allowed."""
+        sm = TDDv2()
+        allowed = sm.get_allowed_tools("green")
+        assert "Read" in allowed
+        assert allowed is not None
+        for pattern in allowed:
+            assert not pattern.startswith("Write")
+            assert not pattern.startswith("Edit")
+
+
+class TestContext:
+    def test_writing_tests_injects_testing_patterns(self):
+        sm = TDDv2()
+        ctx = sm.get_context("writing_tests")
+        assert "conditional/testing-patterns.md" in ctx
+
+    def test_fixing_tests_injects_core(self):
+        sm = TDDv2()
+        ctx = sm.get_context("fixing_tests")
+        assert "core/*" in ctx
+
+    def test_green_injects_nothing(self):
+        sm = TDDv2()
+        ctx = sm.get_context("green")
+        assert ctx == []
+
+
+class TestAutoTransitions:
+    def test_red_is_marked_transient(self):
+        sm = TDDv2()
+        assert "red" in sm.AUTO_TRANSITIONS
+
+    def test_green_is_marked_transient(self):
+        sm = TDDv2()
+        assert "green" in sm.AUTO_TRANSITIONS
+
+    def test_auto_transition_from_red(self):
+        sm = TDDv2()
+        assert sm.AUTO_TRANSITIONS["red"] == "start_fixing"
+
+    def test_auto_transition_from_green(self):
+        sm = TDDv2()
+        assert sm.AUTO_TRANSITIONS["green"] == "start_next_test"
+
+
+class TestSoftness:
+    def test_happy_path_softness_is_high(self):
+        sm = TDDv2()
+        assert sm.get_softness("pytest_fail") == 1.0
+        assert sm.get_softness("pytest_pass") == 1.0
+        assert sm.get_softness("start_fixing") == 1.0
+        assert sm.get_softness("start_next_test") == 1.0

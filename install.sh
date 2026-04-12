@@ -35,12 +35,14 @@ cp "$PLUGIN_DIR/hooks/session-start.sh" ~/.claude/plugins/context-injector/hooks
 cp "$PLUGIN_DIR/hooks/governor-hook.sh" ~/.claude/plugins/context-injector/hooks/
 cp "$PLUGIN_DIR/hooks/session-start-v2.sh" ~/.claude/plugins/context-injector/hooks/
 cp "$PLUGIN_DIR/hooks/pre-compact.sh" ~/.claude/plugins/context-injector/hooks/
+cp "$PLUGIN_DIR/hooks/post-tool-use.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/pre-tool-use.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/governor-hook.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/session-start-v2.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/pre-compact.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/post-tool-use.sh
 
 echo "Installing commands..."
 cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
@@ -59,6 +61,7 @@ mkdir -p "$MACHINES_DIR"
 cp "$PLUGIN_DIR/machines/__init__.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/base.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/tdd_cycle.py" "$MACHINES_DIR/"
+cp "$PLUGIN_DIR/machines/tdd_v2.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/feature_development.py" "$MACHINES_DIR/"
 
 # --- create settings.json if missing ---
@@ -108,6 +111,18 @@ if [ "$HAS_GOVERNOR" = "false" ]; then
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
   echo "PreToolUse governor hook already wired, skipping."
+fi
+
+# --- wire PostToolUse hook (idempotent) ---
+HAS_POST_TOOL=$(jq '[.hooks.PostToolUse[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
+if [ "$HAS_POST_TOOL" = "false" ]; then
+  echo "Wiring PostToolUse hook..."
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/post-tool-use.sh"}]}'
+  jq --argjson entry "$HOOK_ENTRY" \
+    '.hooks.PostToolUse = ((.hooks.PostToolUse // []) + [$entry])' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+else
+  echo "PostToolUse hook already wired, skipping."
 fi
 
 # --- wire PreCompact hook (idempotent) ---

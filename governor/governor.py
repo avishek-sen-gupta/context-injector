@@ -141,6 +141,109 @@ class Governor:
             "audit_entry": audit_entry,
         }
 
+    def trigger_transition(self, event_name: str, timestamp: str | None = None) -> dict:
+        """Trigger a named transition (e.g. pytest_fail, pytest_pass).
+
+        Called by PostToolUse hooks to drive state changes based on tool results.
+        After the transition, auto-advances through any transient states.
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+        from_state = self.machine.current_state_name
+
+        # Fire the transition
+        send = getattr(self.machine, event_name, None)
+        if send is None:
+            return {
+                "current_state": from_state,
+                "transition": None,
+                "action": "challenge",
+                "message": f"Unknown transition '{event_name}'.",
+                "context_to_inject": [],
+            }
+
+        try:
+            send()
+        except Exception:
+            return {
+                "current_state": from_state,
+                "transition": None,
+                "action": "challenge",
+                "message": f"Transition '{event_name}' not valid from state '{from_state}'.",
+                "context_to_inject": [],
+            }
+
+        mid_state = self.machine.current_state_name
+
+        # Write audit for the primary transition
+        audit_entry = {
+            "timestamp": timestamp,
+            "session_id": self.session_id,
+            "machine": type(self.machine).__name__,
+            "from_state": from_state,
+            "to_state": mid_state,
+            "trigger": "pytest_result",
+            "softness": None,
+            "action_taken": "allow",
+            "tool_name": event_name,
+            "tool_input_summary": event_name,
+            "declaration": None,
+            "stack_depth": 0,
+            "user_prompt": False,
+            "context_injected": [],
+            "message": None,
+        }
+        write_audit_entry(self._audit_file, audit_entry)
+
+        # Auto-advance through transient states
+        context_to_inject = []
+        auto_transitions = getattr(self.machine, "AUTO_TRANSITIONS", {})
+        while mid_state in auto_transitions:
+            auto_event = auto_transitions[mid_state]
+            auto_send = getattr(self.machine, auto_event)
+            prev = mid_state
+            auto_send()
+            mid_state = self.machine.current_state_name
+
+            # Audit the auto-transition
+            auto_audit = {
+                "timestamp": timestamp,
+                "session_id": self.session_id,
+                "machine": type(self.machine).__name__,
+                "from_state": prev,
+                "to_state": mid_state,
+                "trigger": "auto_transition",
+                "softness": None,
+                "action_taken": "allow",
+                "tool_name": auto_event,
+                "tool_input_summary": auto_event,
+                "declaration": None,
+                "stack_depth": 0,
+                "user_prompt": False,
+                "context_injected": [],
+                "message": None,
+            }
+            write_audit_entry(self._audit_file, auto_audit)
+
+        # Resolve context for the final state
+        final_state = self.machine.current_state_name
+        if self._last_injected_state != final_state:
+            context_to_inject = self._resolve_context(final_state)
+            self._last_injected_state = final_state
+
+        # Persist final state
+        self._persist_state(final_state, timestamp)
+        self._recent_tools = []
+
+        return {
+            "current_state": final_state,
+            "transition": f"{from_state} -> {final_state}",
+            "action": "allow",
+            "context_to_inject": context_to_inject,
+            "message": None,
+        }
+
     def _extract_declaration(self, tool_name: str, tool_input: dict) -> dict | None:
         """Extract a DeclarePhase declaration from a Bash echo command."""
         if tool_name != "Bash":
@@ -300,10 +403,8 @@ class Governor:
         return json.dumps(tool_input)[:100]
 
 
-def main():
-    """CLI entry point: read JSON from stdin, write response to stdout."""
-    event = json.load(sys.stdin)
-
+def _build_governor(event: dict) -> "Governor":
+    """Build a Governor instance from environment variables and event data."""
     state_dir = os.environ.get("CTX_STATE_DIR", "/tmp/ctx-state")
     audit_dir = os.environ.get("CTX_AUDIT_DIR", os.path.join(os.getcwd(), ".claude", "audit"))
     context_dir = os.environ.get("CTX_CONTEXT_DIR", os.path.join(os.getcwd(), ".claude"))
@@ -317,7 +418,7 @@ def main():
     mod = importlib.import_module(module_path)
     machine_cls = getattr(mod, class_name)
 
-    gov = Governor(
+    return Governor(
         machine=machine_cls(),
         state_dir=state_dir,
         audit_dir=audit_dir,
@@ -326,7 +427,24 @@ def main():
         session_id=session_id,
     )
 
-    result = gov.evaluate(event)
+
+def main():
+    """CLI entry point: read JSON from stdin, write response to stdout.
+
+    Modes:
+      - Default (no args): evaluate a PreToolUse event
+      - 'trigger <event_name>': fire a named transition (e.g. pytest_fail)
+    """
+    if len(sys.argv) >= 3 and sys.argv[1] == "trigger":
+        event_name = sys.argv[2]
+        event = json.load(sys.stdin)
+        gov = _build_governor(event)
+        result = gov.trigger_transition(event_name)
+    else:
+        event = json.load(sys.stdin)
+        gov = _build_governor(event)
+        result = gov.evaluate(event)
+
     json.dump(result, sys.stdout, indent=2)
 
 
