@@ -106,6 +106,92 @@ cp commands/ctx.md ~/.claude/commands/ctx.md
 "Bash(rm:/tmp/ctx-locks/*)"
 ```
 
+## v2: State Machine Governor
+
+The governor mode replaces keyword-based classification with a state machine that tracks Claude's workflow phase, injects context based on current state, enforces transitions with configurable softness, and produces an audit trail.
+
+### How it works
+
+1. **SessionStart** initializes the state machine and injects DeclarePhase instructions
+2. **PreToolUse** runs the governor on every tool call — it checks the tool against allowed-tools for the current state and detects phase declarations
+3. **PreCompact** re-injects state context before conversation compaction so invariants survive compression
+4. Claude announces transitions by running: `echo '{"declare_phase": "<phase>", "reason": "<why>"}'`
+5. The governor validates the transition, applies a graduated response based on softness, injects context files for the new state, and writes an audit entry
+
+### Graduated response
+
+Each transition has a **softness** value (0.0–1.0) controlling how the governor responds:
+
+| Softness | Action | Behavior |
+|---|---|---|
+| ≥ 0.7 | allow | Transition proceeds silently |
+| 0.3–0.7 | remind | Transition proceeds with a deviation warning |
+| < 0.3 | challenge | Transition proceeds but Claude is asked to justify |
+
+### Built-in machines
+
+**TDDCycle** (`machines.tdd_cycle.TDDCycle`) — the default:
+- States: `red` → `green` → `refactor` (+ `docs_detour`)
+- Enforces test-first development with tool restrictions per state (e.g., only test files editable in `red`)
+
+**FeatureDevelopment** (`machines.feature_development.FeatureDevelopment`):
+- States: `planning` → `implementing` → `reviewing` → `committing`
+- Delegates `implementing` to a TDDCycle sub-machine
+
+### Defining custom machines
+
+Create a Python class extending `GovernedMachine`:
+
+```python
+from statemachine import State
+from machines.base import GovernedMachine
+
+class MyWorkflow(GovernedMachine):
+    step_a = State(initial=True)
+    step_b = State()
+
+    advance = step_a.to(step_b)
+
+    SOFTNESS = {"advance": 1.0}
+    CONTEXT = {
+        "step_a": ["core/*"],
+        "step_b": ["conditional/review.md"],
+    }
+    ALLOWED_TOOLS = {
+        "step_a": ["Edit", "Write"],
+        "step_b": ["Read", "Grep"],
+    }
+```
+
+Place it in `machines/` and set `CTX_MACHINE` to its dotted path (e.g., `machines.my_workflow.MyWorkflow`).
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `CTX_MACHINE` | `machines.tdd_cycle.TDDCycle` | Dotted path to the state machine class |
+| `CTX_STATE_DIR` | `/tmp/ctx-state` | Directory for persisted state files |
+| `CTX_AUDIT_DIR` | `$PWD/.claude/audit` | Directory for JSONL audit logs |
+| `CTX_CONTEXT_DIR` | `$PWD/.claude` | Base directory for context file resolution |
+| `CTX_PROJECT_HASH` | md5 of `$PWD` | Unique identifier for the project |
+
+### Audit trail
+
+Each governor evaluation appends a JSON line to `$CTX_AUDIT_DIR/<session_id>.jsonl` with: timestamp, from/to state, trigger type, softness, action taken, tool name, and context files injected.
+
+### Migration from v1
+
+v1 hooks (keyword-based `UserPromptSubmit`, `PreToolUse`, `SessionStart`) are preserved. The governor adds three new hooks alongside them:
+- `governor-hook.sh` (PreToolUse) — state machine evaluation
+- `session-start-v2.sh` (SessionStart) — state machine initialization
+- `pre-compact.sh` (PreCompact) — compaction survival
+
+Both v1 and v2 hooks check the same lockfile (`/tmp/ctx-locks/<hash>`), so `/ctx on|off` controls both. To use v2, run `install.sh` — it installs all hooks and wires them into `.claude/settings.json`.
+
+### Additional requirements for v2
+
+- Python 3 with `python-statemachine>=3.0.0` (`pip3 install python-statemachine`)
+
 ## License
 
 [MIT](LICENSE.md)
