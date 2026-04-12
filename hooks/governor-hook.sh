@@ -49,11 +49,21 @@ for f in r.get('context_to_inject', []):
     print(f)
 " 2>/dev/null)
 
-# Output state indicator
+# If action is "challenge", block the tool (exit 2, message on stderr)
+if [ "$ACTION" = "challenge" ]; then
+    echo "[governor: state=$STATE — BLOCKED]" >&2
+    if [ -n "$MESSAGE" ]; then
+        echo "" >&2
+        echo "$MESSAGE" >&2
+    fi
+    exit 2
+fi
+
+# Output state indicator (for allow/remind — advisory context)
 echo "[governor: state=$STATE action=$ACTION]"
 echo ""
 
-# Output message if present (remind or challenge)
+# Output message if present (remind)
 if [ -n "$MESSAGE" ]; then
     echo "<governor-message>"
     echo "$MESSAGE"
