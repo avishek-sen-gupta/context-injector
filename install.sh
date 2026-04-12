@@ -49,6 +49,7 @@ cp "$PLUGIN_DIR/commands/governor.md" ~/.claude/commands/governor.md
 echo "Installing governor..."
 mkdir -p "$GOVERNOR_DIR"
 cp "$PLUGIN_DIR/governor/__init__.py" "$GOVERNOR_DIR/"
+cp "$PLUGIN_DIR/governor/__main__.py" "$GOVERNOR_DIR/"
 cp "$PLUGIN_DIR/governor/state_io.py" "$GOVERNOR_DIR/"
 cp "$PLUGIN_DIR/governor/audit.py" "$GOVERNOR_DIR/"
 cp "$PLUGIN_DIR/governor/governor.py" "$GOVERNOR_DIR/"
