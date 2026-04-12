@@ -39,11 +39,19 @@ class TDDv2(GovernedMachine):
         "green": [],
     }
 
+    # Non-destructive tools allowed in every state
+    _ALWAYS_ALLOWED = [
+        "Read", "Grep", "Glob", "ToolSearch", "Agent",
+        "AskUserQuestion", "TodoRead", "TodoWrite",
+        "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",
+        "LSP", "WebSearch", "WebFetch",
+    ]
+
     ALLOWED_TOOLS = {
-        "writing_tests": ["Write(test_*)", "Edit(test_*)", "Read", "Bash(pytest*)"],
-        "red": ["Read", "Bash(pytest*)"],
-        "fixing_tests": ["Edit", "Write", "Read", "Bash(pytest*)"],
-        "green": ["Read"],
+        "writing_tests": _ALWAYS_ALLOWED + ["Write(test_*)", "Edit(test_*)", "Bash(pytest*)"],
+        "red": _ALWAYS_ALLOWED + ["Bash(pytest*)"],
+        "fixing_tests": _ALWAYS_ALLOWED + ["Edit", "Write", "Bash"],
+        "green": _ALWAYS_ALLOWED,
     }
 
     # Transient states auto-advance via these transitions

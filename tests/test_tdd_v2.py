@@ -107,7 +107,7 @@ class TestAllowedTools:
         allowed = sm.get_allowed_tools("fixing_tests")
         assert "Edit" in allowed
         assert "Write" in allowed
-        assert "Bash(pytest*)" in allowed
+        assert "Bash" in allowed
         assert "Read" in allowed
 
     def test_green_allows_read_only(self):

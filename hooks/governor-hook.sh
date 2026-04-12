@@ -16,6 +16,12 @@ PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 # Read stdin (tool event JSON from Claude Code)
 INPUT=$(cat)
 
+# Bypass governance for ctx lock file operations (so /ctx can toggle on/off)
+COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
+case "$COMMAND" in
+    *ctx-locks*|*ctx-state*) exit 0 ;;
+esac
+
 # Set environment for governor
 export CTX_STATE_DIR="/tmp/ctx-state"
 export CTX_AUDIT_DIR="$PWD/.claude/audit"
