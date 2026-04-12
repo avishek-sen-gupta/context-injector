@@ -90,10 +90,7 @@ class Governor:
         transitioned = from_state != to_state
 
         # Context injection: only when state changed or first evaluation
-        if transitioned or self._last_injected_state is None:
-            context_to_inject = self._resolve_context(to_state)
-            self._last_injected_state = to_state
-        elif self._last_injected_state != to_state:
+        if transitioned or self._last_injected_state != to_state:
             context_to_inject = self._resolve_context(to_state)
             self._last_injected_state = to_state
 
