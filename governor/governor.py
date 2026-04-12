@@ -336,32 +336,68 @@ class Governor:
     def _check_tool_against_state(
         self, tool_name: str, tool_input: dict
     ) -> tuple[str, str | None]:
-        """Check if a tool use is allowed in the current state."""
-        allowed = self.machine.get_allowed_tools(self.machine.current_state_name)
+        """Check if a tool use is allowed in the current state.
+
+        Uses BLOCKED_TOOLS (blocklist) if defined, else falls back to ALLOWED_TOOLS (allowlist).
+        Blocklist is preferred: everything is allowed unless explicitly blocked.
+        """
+        state_name = self.machine.current_state_name
+        file_path = tool_input.get("file_path", tool_input.get("command", ""))
+        target = os.path.basename(file_path)
+        tool_with_target = f"{tool_name}({target})"
+
+        # Blocklist mode: block matching tools, allow everything else.
+        # Patterns prefixed with ! are exceptions (allowlist overrides).
+        blocked = self.machine.get_blocked_tools(state_name)
+        if blocked is not None:
+            exceptions = [p[1:] for p in blocked if p.startswith("!")]
+            block_patterns = [p for p in blocked if not p.startswith("!")]
+
+            # Check exceptions first — if tool matches an exception, allow it
+            for pattern in exceptions:
+                if self._matches_tool_pattern(tool_name, target, tool_with_target, pattern):
+                    return "allow", None
+
+            # Check block patterns
+            for pattern in block_patterns:
+                if self._matches_tool_pattern(tool_name, target, tool_with_target, pattern):
+                    return (
+                        "challenge",
+                        f"Tool '{tool_name}' targeting '{target}' is blocked in state "
+                        f"'{state_name}'. Run pytest to transition to the correct phase.",
+                    )
+            return "allow", None
+
+        # Allowlist mode (legacy): only listed tools are allowed
+        allowed = self.machine.get_allowed_tools(state_name)
         if allowed is None or allowed == ["*"]:
             return "allow", None
 
-        file_path = tool_input.get("file_path", tool_input.get("command", ""))
-        tool_with_target = f"{tool_name}({os.path.basename(file_path)})"
-
         for pattern in allowed:
-            if fnmatch.fnmatch(tool_with_target, pattern):
+            if self._matches_tool_pattern(tool_name, target, tool_with_target, pattern):
                 return "allow", None
-            if fnmatch.fnmatch(tool_name, pattern.split("(")[0] if "(" in pattern else pattern):
-                # Tool name matches but target might not — check target pattern
-                if "(" in pattern:
-                    inner = pattern.split("(", 1)[1].rstrip(")")
-                    if fnmatch.fnmatch(os.path.basename(file_path), inner):
-                        return "allow", None
-                else:
-                    return "allow", None
 
         return (
             "challenge",
-            f"Tool '{tool_name}' targeting '{os.path.basename(file_path)}' is not in the "
-            f"allowed list for state '{self.machine.current_state_name}': {allowed}. "
+            f"Tool '{tool_name}' targeting '{target}' is not in the "
+            f"allowed list for state '{state_name}': {allowed}. "
             f"Declare a phase transition if you need to do this.",
         )
+
+    @staticmethod
+    def _matches_tool_pattern(
+        tool_name: str, target: str, tool_with_target: str, pattern: str
+    ) -> bool:
+        """Check if a tool call matches a pattern like 'Write', 'Write(test_*)', etc."""
+        if fnmatch.fnmatch(tool_with_target, pattern):
+            return True
+        pat_name = pattern.split("(")[0] if "(" in pattern else pattern
+        if fnmatch.fnmatch(tool_name, pat_name):
+            if "(" in pattern:
+                inner = pattern.split("(", 1)[1].rstrip(")")
+                return fnmatch.fnmatch(target, inner)
+            return True
+        return False
 
     def _resolve_context(self, state_name: str) -> list[str]:
         """Resolve context file patterns to actual file paths."""

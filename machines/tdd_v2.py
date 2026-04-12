@@ -39,19 +39,14 @@ class TDDv2(GovernedMachine):
         "green": [],
     }
 
-    # Non-destructive tools allowed in every state
-    _ALWAYS_ALLOWED = [
-        "Read", "Grep", "Glob", "ToolSearch", "Agent",
-        "AskUserQuestion", "TodoRead", "TodoWrite",
-        "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",
-        "LSP", "WebSearch", "WebFetch",
-    ]
-
-    ALLOWED_TOOLS = {
-        "writing_tests": _ALWAYS_ALLOWED + ["Write(test_*)", "Edit(test_*)", "Bash(pytest*)"],
-        "red": _ALWAYS_ALLOWED + ["Bash(pytest*)"],
-        "fixing_tests": _ALWAYS_ALLOWED + ["Edit", "Write", "Bash"],
-        "green": _ALWAYS_ALLOWED,
+    # Blocklist: block file-modifying tools where inappropriate.
+    # Everything not listed is allowed (Read, Grep, Glob, Agent, etc.).
+    # Prefix with ! to create exceptions (e.g. !Write(test_*) = allow Write on test files).
+    BLOCKED_TOOLS = {
+        "writing_tests": ["Write", "Edit", "!Write(test_*)", "!Edit(test_*)"],
+        "red": ["Write", "Edit"],
+        "fixing_tests": [],
+        "green": ["Write", "Edit"],
     }
 
     # Transient states auto-advance via these transitions

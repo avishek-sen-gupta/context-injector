@@ -82,43 +82,35 @@ class TestTransitions:
             sm.start_next_test()
 
 
-class TestAllowedTools:
-    def test_writing_tests_only_allows_test_files(self):
+class TestBlockedTools:
+    def test_writing_tests_blocks_production_writes(self):
         sm = TDDv2()
-        allowed = sm.get_allowed_tools("writing_tests")
-        assert "Write(test_*)" in allowed
-        assert "Edit(test_*)" in allowed
-        assert "Read" in allowed
-        assert "Bash(pytest*)" in allowed
+        blocked = sm.get_blocked_tools("writing_tests")
+        assert "Write" in blocked
+        assert "Edit" in blocked
 
-    def test_red_allows_read_only(self):
-        """RED is transient — only Read and Bash allowed, no edits."""
+    def test_writing_tests_excepts_test_files(self):
         sm = TDDv2()
-        allowed = sm.get_allowed_tools("red")
-        assert "Read" in allowed
-        assert allowed is not None
-        # No Write or Edit
-        for pattern in allowed:
-            assert not pattern.startswith("Write")
-            assert not pattern.startswith("Edit")
+        blocked = sm.get_blocked_tools("writing_tests")
+        assert "!Write(test_*)" in blocked
+        assert "!Edit(test_*)" in blocked
 
-    def test_fixing_tests_allows_production_code(self):
+    def test_red_blocks_writes(self):
         sm = TDDv2()
-        allowed = sm.get_allowed_tools("fixing_tests")
-        assert "Edit" in allowed
-        assert "Write" in allowed
-        assert "Bash" in allowed
-        assert "Read" in allowed
+        blocked = sm.get_blocked_tools("red")
+        assert "Write" in blocked
+        assert "Edit" in blocked
 
-    def test_green_allows_read_only(self):
-        """GREEN is transient — only Read allowed."""
+    def test_fixing_tests_blocks_nothing(self):
         sm = TDDv2()
-        allowed = sm.get_allowed_tools("green")
-        assert "Read" in allowed
-        assert allowed is not None
-        for pattern in allowed:
-            assert not pattern.startswith("Write")
-            assert not pattern.startswith("Edit")
+        blocked = sm.get_blocked_tools("fixing_tests")
+        assert blocked == []
+
+    def test_green_blocks_writes(self):
+        sm = TDDv2()
+        blocked = sm.get_blocked_tools("green")
+        assert "Write" in blocked
+        assert "Edit" in blocked
 
 
 class TestContext:
