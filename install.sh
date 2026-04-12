@@ -77,28 +77,36 @@ else
   echo "UserPromptSubmit hook already wired, skipping."
 fi
 
-# --- wire SessionStart hook (idempotent) ---
-ALREADY_WIRED=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
-if [ "$ALREADY_WIRED" = "false" ]; then
-  echo "Wiring SessionStart hook..."
-  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"}]}'
+# --- wire SessionStart hook (v2 governor, upgrades v1) ---
+HAS_V2_SESSION=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("session-start-v2"))' "$SETTINGS")
+if [ "$HAS_V2_SESSION" = "false" ]; then
+  echo "Wiring SessionStart hook (v2)..."
+  # Remove v1 session-start hook if present
+  jq '.hooks.SessionStart = [(.hooks.SessionStart // [])[] | select(.hooks[0].command | contains("session-start-v2") or (contains("context-injector") | not))]' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+  # Add v2 hook
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start-v2.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
     '.hooks.SessionStart = ((.hooks.SessionStart // []) + [$entry])' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
-  echo "SessionStart hook already wired, skipping."
+  echo "SessionStart v2 hook already wired, skipping."
 fi
 
-# --- wire PreToolUse hook (idempotent) ---
-ALREADY_WIRED=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
-if [ "$ALREADY_WIRED" = "false" ]; then
-  echo "Wiring PreToolUse hook..."
-  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/pre-tool-use.sh"}]}'
+# --- wire PreToolUse hook (v2 governor, upgrades v1) ---
+HAS_GOVERNOR=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("governor-hook"))' "$SETTINGS")
+if [ "$HAS_GOVERNOR" = "false" ]; then
+  echo "Wiring PreToolUse hook (governor)..."
+  # Remove v1 pre-tool-use hook if present
+  jq '.hooks.PreToolUse = [(.hooks.PreToolUse // [])[] | select(.hooks[0].command | contains("governor-hook") or (contains("context-injector") | not))]' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+  # Add governor hook
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/governor-hook.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
     '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [$entry])' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
-  echo "PreToolUse hook already wired, skipping."
+  echo "PreToolUse governor hook already wired, skipping."
 fi
 
 # --- wire PreCompact hook (idempotent) ---
