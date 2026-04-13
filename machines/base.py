@@ -18,6 +18,7 @@ class GovernedMachine(StateMachine):
     SESSION_INSTRUCTIONS: str = ""
     GUARDS: dict[str, list] = {}
     GATE_SOFTNESS: dict[str, float] = {}
+    CHECK_STATES: dict[str, dict] = {}   # gate runs on entry, result picks transition
 
     def get_softness(self, transition_name: str) -> float:
         """Return the softness value for a transition. Defaults to 1.0."""

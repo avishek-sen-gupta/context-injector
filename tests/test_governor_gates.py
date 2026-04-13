@@ -212,6 +212,128 @@ class TestGateInDeclaration:
         assert result["current_state"] == "red"
 
 
+class ToggleGate(Gate):
+    """Gate whose verdict can be toggled between PASS and FAIL."""
+    name = "toggle"
+    _verdict = GateVerdict.FAIL
+
+    def evaluate(self, ctx):
+        if self._verdict == GateVerdict.PASS:
+            return GateResult(GateVerdict.PASS)
+        return GateResult(GateVerdict.FAIL, message="lint violations", issues=["violation_1"])
+
+    @classmethod
+    def set_pass(cls):
+        cls._verdict = GateVerdict.PASS
+
+    @classmethod
+    def set_fail(cls):
+        cls._verdict = GateVerdict.FAIL
+
+
+class CheckStateTDD(TDD):
+    """TDD subclass that uses ToggleGate for CHECK_STATES."""
+    CHECK_STATES = {
+        "linting": {
+            "gate": ToggleGate,
+            "pass_event": "lint_pass",
+            "fail_event": "lint_fail",
+        },
+    }
+
+
+@pytest.fixture(autouse=False)
+def reset_toggle_gate():
+    """Reset ToggleGate to FAIL before each test."""
+    ToggleGate.set_fail()
+    yield
+    ToggleGate.set_fail()
+
+
+@pytest.fixture
+def check_governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir, reset_toggle_gate):
+    return Governor(
+        machine=CheckStateTDD(),
+        state_dir=tmp_state_dir,
+        audit_dir=tmp_audit_dir,
+        context_dir=tmp_context_dir,
+        project_hash="checktest",
+        session_id="check-session",
+    )
+
+
+class TestCheckStatesLintPass:
+    """When lint gate passes in CHECK_STATES, should advance to writing_tests."""
+
+    def _setup_with_files(self, gov):
+        """Get to fixing_tests and record a file write so recent_files is populated."""
+        gov.trigger_transition("pytest_fail")
+        gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/widget.py"},
+            "session_id": "check-session",
+            "timestamp": "2026-04-13T11:59:00Z",
+        })
+
+    def test_lint_pass_goes_to_writing_tests(self, check_governor):
+        self._setup_with_files(check_governor)
+        ToggleGate.set_pass()
+        result = check_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "writing_tests"
+
+
+
+class TestCheckStatesLintFail:
+    """When lint gate fails in CHECK_STATES, should advance to fixing_lint."""
+
+    def _setup_with_files(self, gov):
+        """Get to fixing_tests and record a file write so recent_files is populated."""
+        gov.trigger_transition("pytest_fail")
+        gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/widget.py"},
+            "session_id": "check-session",
+            "timestamp": "2026-04-13T11:59:00Z",
+        })
+
+    def test_lint_fail_goes_to_fixing_lint(self, check_governor):
+        self._setup_with_files(check_governor)
+        ToggleGate.set_fail()
+        result = check_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "fixing_lint"
+
+
+    def test_lint_fail_message_in_result(self, check_governor):
+        self._setup_with_files(check_governor)
+        ToggleGate.set_fail()
+        result = check_governor.trigger_transition("pytest_pass")
+        assert "lint violations" in result.get("message", "")
+
+
+class TestCheckStateAuditTrail:
+    """Audit entries are written for CHECK_STATES and RECHECK_STATES gate evaluations."""
+
+    def test_check_state_writes_gate_audit(self, check_governor, tmp_audit_dir):
+        check_governor.trigger_transition("pytest_fail")
+        check_governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/widget.py"},
+            "session_id": "check-session",
+            "timestamp": "2026-04-13T11:59:00Z",
+        })
+        ToggleGate.set_fail()
+        check_governor.trigger_transition("pytest_pass")
+        from governor.audit import read_audit_log
+        audit_file = os.path.join(tmp_audit_dir, "check-session.audit.json")
+        entries = read_audit_log(audit_file)
+        gate_entries = [e for e in entries if e.get("type") == "check_state_gate"]
+        assert len(gate_entries) >= 1
+        assert gate_entries[0]["gate"] == "toggle"
+        assert gate_entries[0]["verdict"] == "fail"
+
 class TestGatesOnTranscriptDetection:
     def _write_transcript(self, path, command, output, fail=True):
         """Write a minimal transcript with a pytest result."""

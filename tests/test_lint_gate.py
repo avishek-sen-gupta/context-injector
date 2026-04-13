@@ -63,6 +63,41 @@ def multi_rules_dir(tmp_path):
     return str(tmp_path)
 
 
+@pytest.fixture
+def mutation_rules_dir(tmp_path):
+    """Create a rules directory with subscript mutation rules."""
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    (rules / "no-subscript-mutation.yml").write_text(
+        'id: no-subscript-mutation\nlanguage: python\nrule:\n'
+        '  pattern: $OBJ[$KEY] = $VAL\n'
+        'message: "Subscript mutation"\nseverity: warning\n'
+    )
+    (rules / "no-subscript-augmented-mutation.yml").write_text(
+        'id: no-subscript-augmented-mutation\nlanguage: python\nrule:\n'
+        '  any:\n'
+        '    - pattern: $OBJ[$KEY] += $VAL\n'
+        '    - pattern: $OBJ[$KEY] -= $VAL\n'
+        '    - pattern: $OBJ[$KEY] *= $VAL\n'
+        'message: "Subscript augmented mutation"\nseverity: warning\n'
+    )
+    (rules / "no-subscript-del.yml").write_text(
+        'id: no-subscript-del\nlanguage: python\nrule:\n'
+        '  pattern: del $OBJ[$KEY]\n'
+        'message: "Subscript deletion"\nseverity: warning\n'
+    )
+    (rules / "no-subscript-tuple-mutation.yml").write_text(
+        'id: no-subscript-tuple-mutation\nlanguage: python\nrule:\n'
+        '  any:\n'
+        '    - pattern: $OBJ[$KEY], $$$REST = $$$VALS\n'
+        '    - pattern: $$$REST, $OBJ[$KEY] = $$$VALS\n'
+        'message: "Tuple subscript mutation"\nseverity: warning\n'
+    )
+    sgconfig = tmp_path / "sgconfig.yml"
+    sgconfig.write_text("ruleDirs:\n  - rules\n")
+    return str(tmp_path)
+
+
 needs_sg = pytest.mark.skipif(
     shutil.which("sg") is None and shutil.which("ast-grep") is None,
     reason="ast-grep (sg) not installed",
@@ -263,3 +298,54 @@ class TestLintGateWithSg:
         gate = LintGate(rules_dir=rules_dir)
         filtered = gate._filter_python_files(ctx.recent_files)
         assert len(filtered) == 1
+
+    def test_augmented_subscript_mutation_fails(self, tmp_path, mutation_rules_dir):
+        """d[key] += amount should be caught."""
+        path = _make_file(tmp_path, "widget.py",
+            "def increment(d, key, amount=1):\n    d[key] += amount\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-subscript-augmented-mutation" in i for i in result.issues)
+
+    def test_subscript_del_fails(self, tmp_path, mutation_rules_dir):
+        """del d[k] should be caught."""
+        path = _make_file(tmp_path, "widget.py",
+            "def remove(d, k):\n    del d[k]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-subscript-del" in i for i in result.issues)
+
+    def test_tuple_subscript_mutation_fails(self, tmp_path, mutation_rules_dir):
+        """d[k1], d[k2] = d[k2], d[k1] should be caught."""
+        path = _make_file(tmp_path, "widget.py",
+            "def swap(d, k1, k2):\n    d[k1], d[k2] = d[k2], d[k1]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-subscript-tuple-mutation" in i for i in result.issues)
+
+    def test_all_dict_mutations_caught(self, tmp_path, mutation_rules_dir):
+        """The exact code from test_dict.py should trigger violations."""
+        code = (
+            "def swap_values(d, key1, key2):\n"
+            "    d[key1], d[key2] = d[key2], d[key1]\n"
+            "\n"
+            "def increment_value(d, key, amount=1):\n"
+            "    d[key] += amount\n"
+            "\n"
+            "def filter_keys(d, keys):\n"
+            "    for k in list(d):\n"
+            "        if k not in keys:\n"
+            "            del d[k]\n"
+        )
+        path = _make_file(tmp_path, "dict_transform.py", code)
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert len(result.issues) >= 3

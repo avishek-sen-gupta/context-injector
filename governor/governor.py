@@ -210,13 +210,45 @@ class Governor:
         }
         write_audit_entry(self._audit_file, audit_entry)
 
-        # Auto-advance through transient states
+        # Auto-advance through transient states (including CHECK_STATES)
         context_to_inject = []
+        check_failure_message = None
         auto_transitions = getattr(self.machine, "AUTO_TRANSITIONS", {})
-        while mid_state in auto_transitions:
-            auto_event = auto_transitions[mid_state]
-            auto_send = getattr(self.machine, auto_event)
+        check_states = getattr(self.machine, "CHECK_STATES", {})
+
+        while mid_state in auto_transitions or mid_state in check_states:
+            if mid_state in check_states:
+                # Conditional auto-advance: run gate, pick transition
+                config = check_states[mid_state]
+                gate = config["gate"]()
+                ctx = self._build_gate_context(event_name)
+                result = gate.evaluate(ctx)
+
+                if result.verdict == GateVerdict.PASS:
+                    auto_event = config["pass_event"]
+                else:
+                    auto_event = config["fail_event"]
+                    check_failure_message = result.message
+
+                # Audit the gate check
+                gate_audit = {
+                    "timestamp": timestamp,
+                    "session_id": self.session_id,
+                    "machine": type(self.machine).__name__,
+                    "type": "check_state_gate",
+                    "from_state": mid_state,
+                    "gate": gate.name,
+                    "verdict": result.verdict.value,
+                    "issues": result.issues,
+                }
+                write_audit_entry(self._audit_file, gate_audit)
+            elif mid_state in auto_transitions:
+                auto_event = auto_transitions[mid_state]
+            else:
+                break
+
             prev = mid_state
+            auto_send = getattr(self.machine, auto_event)
             auto_send()
             mid_state = self.machine.current_state_name
 
@@ -260,7 +292,7 @@ class Governor:
             "transition": f"{from_state} -> {final_state}",
             "action": "allow",
             "context_to_inject": context_to_inject,
-            "message": None,
+            "message": check_failure_message,
         }
 
     def _build_gate_context(self, event_name: str) -> "GateContext":
