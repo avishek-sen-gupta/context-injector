@@ -390,3 +390,46 @@ def test_context_cli_no_state_file(mock_project):
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
     assert result.stdout.strip() == ""
+
+
+class TestPortableHash:
+    """Test that hooks/lib/hash.sh produces consistent MD5 hashes on any platform."""
+
+    HASH_SH = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "hooks", "lib", "hash.sh",
+    )
+
+    def _run_hash(self, input_str):
+        """Source hash.sh and call project_hash with the given input."""
+        result = subprocess.run(
+            ["sh", "-c", f'. "{self.HASH_SH}" && project_hash "$1"', "_", input_str],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"hash.sh failed: {result.stderr}"
+        return result.stdout.strip()
+
+    def test_deterministic(self):
+        """Same input always produces the same hash."""
+        h1 = self._run_hash("/tmp/test-project")
+        h2 = self._run_hash("/tmp/test-project")
+        assert h1 == h2
+
+    def test_is_valid_md5(self):
+        """Output is a 32-character lowercase hex string (standard MD5 digest)."""
+        h = self._run_hash("/some/path")
+        assert len(h) == 32, f"Expected 32 chars, got {len(h)}: {h!r}"
+        assert all(c in "0123456789abcdef" for c in h), f"Non-hex chars in: {h!r}"
+
+    def test_different_inputs_differ(self):
+        """Different paths produce different hashes."""
+        h1 = self._run_hash("/project/a")
+        h2 = self._run_hash("/project/b")
+        assert h1 != h2
+
+    def test_known_value(self):
+        """Verify against a known MD5 to catch algorithm mismatches across platforms."""
+        # MD5 of the empty string is d41d8cd98f00b204e9800998ecf8427e
+        h = self._run_hash("")
+        assert h == "d41d8cd98f00b204e9800998ecf8427e"
