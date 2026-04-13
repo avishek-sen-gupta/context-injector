@@ -45,7 +45,7 @@ rm -f "$GOV_LOCK" && echo "Removed governor lock file."
 
 # --- remove governor hook files ---
 echo "Removing governor hook files..."
-for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
+for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh bd-terminology-guard.sh; do
   if [ -f ~/.claude/plugins/context-injector/hooks/"$hook" ]; then
     rm -f ~/.claude/plugins/context-injector/hooks/"$hook"
     echo "  Removed $hook"
