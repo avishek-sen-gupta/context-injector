@@ -16,6 +16,8 @@ class GovernedMachine(StateMachine):
     BLOCKED_TOOLS: dict[str, list[str]] = {}
     PRECONDITIONS: dict[str, list[str]] = {}
     SESSION_INSTRUCTIONS: str = ""
+    GUARDS: dict[str, list] = {}
+    GATE_SOFTNESS: dict[str, float] = {}
 
     def get_softness(self, transition_name: str) -> float:
         """Return the softness value for a transition. Defaults to 1.0."""
@@ -36,6 +38,14 @@ class GovernedMachine(StateMachine):
     def get_preconditions(self, transition_name: str) -> list[str]:
         """Return required tool patterns for a transition. Defaults to []."""
         return self.PRECONDITIONS.get(transition_name, [])
+
+    def get_guards(self, transition_name: str) -> list:
+        """Return gate classes registered for a transition. Defaults to []."""
+        return self.GUARDS.get(transition_name, [])
+
+    def get_gate_softness(self, gate_name: str) -> float:
+        """Return the softness override for a gate. Defaults to 0.0 (strict)."""
+        return self.GATE_SOFTNESS.get(gate_name, 0.0)
 
     @property
     def current_state_name(self) -> str:

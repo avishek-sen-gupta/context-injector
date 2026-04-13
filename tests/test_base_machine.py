@@ -118,3 +118,56 @@ class MachineWithInstructions(GovernedMachine):
 def test_session_instructions_returns_custom():
     sm = MachineWithInstructions()
     assert sm.SESSION_INSTRUCTIONS == "Custom instructions here."
+
+
+from gates.base import Gate, GateResult, GateVerdict, GateContext
+
+
+class StubGate(Gate):
+    name = "stub"
+    def evaluate(self, ctx):
+        return GateResult(GateVerdict.PASS)
+
+
+class MachineWithGuards(GovernedMachine):
+    alpha = State(initial=True)
+    beta = State()
+    go = alpha.to(beta)
+    back = beta.to(alpha)
+
+    GUARDS = {
+        "go": [StubGate],
+    }
+    GATE_SOFTNESS = {
+        "stub": 0.1,
+    }
+
+
+def test_get_guards_returns_gate_classes():
+    sm = MachineWithGuards()
+    assert sm.get_guards("go") == [StubGate]
+
+
+def test_get_guards_returns_empty_for_unknown():
+    sm = MachineWithGuards()
+    assert sm.get_guards("nonexistent") == []
+
+
+def test_get_guards_defaults_to_empty():
+    sm = SimpleMachine()
+    assert sm.get_guards("go") == []
+
+
+def test_get_gate_softness_returns_value():
+    sm = MachineWithGuards()
+    assert sm.get_gate_softness("stub") == 0.1
+
+
+def test_get_gate_softness_defaults_to_zero():
+    sm = MachineWithGuards()
+    assert sm.get_gate_softness("unknown") == 0.0
+
+
+def test_get_gate_softness_defaults_when_not_defined():
+    sm = SimpleMachine()
+    assert sm.get_gate_softness("anything") == 0.0
