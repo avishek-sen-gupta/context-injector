@@ -180,10 +180,12 @@ class TestAuditTrail:
             "session_id": "test-session",
             "timestamp": "2026-04-12T12:00:00Z",
         })
-        audit_file = os.path.join(tmp_audit_dir, "test-session.jsonl")
+        audit_file = os.path.join(tmp_audit_dir, "test-session.audit.json")
         assert os.path.exists(audit_file)
-        with open(audit_file) as f:
-            entry = json.loads(f.readline())
+        from governor.audit import read_audit_log
+        entries = read_audit_log(audit_file)
+        assert len(entries) >= 1
+        entry = entries[0]
         assert entry["machine"] == "TDDCycle"
         assert entry["from_state"] == "red"
         assert entry["tool_name"] == "Edit"

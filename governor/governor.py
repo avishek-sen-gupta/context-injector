@@ -43,7 +43,7 @@ class Governor:
         self.session_id = session_id
 
         self._state_file = os.path.join(state_dir, f"{project_hash}.json")
-        self._audit_file = os.path.join(audit_dir, f"{session_id}.jsonl")
+        self._audit_file = os.path.join(audit_dir, f"{session_id}.audit.json")
         self._last_injected_state = None
 
         # Load persisted state and restore machine position

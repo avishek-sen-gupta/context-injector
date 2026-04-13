@@ -186,10 +186,10 @@ def test_full_tdd_cycle_sequence(mock_project):
     assert r["current_state"] == "red"
 
     # 6. Verify audit trail
-    audit_file = os.path.join(audit_dir, "e2e.jsonl")
+    audit_file = os.path.join(audit_dir, "e2e.audit.json")
     assert os.path.exists(audit_file)
-    with open(audit_file) as f:
-        entries = [json.loads(line) for line in f if line.strip()]
+    from governor.audit import read_audit_log
+    entries = read_audit_log(audit_file)
     assert len(entries) == 7
     assert entries[0]["from_state"] == "red"
     assert entries[1]["to_state"] == "green"

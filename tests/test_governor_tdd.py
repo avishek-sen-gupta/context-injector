@@ -278,9 +278,9 @@ class TestAuditTrail:
     def test_auto_transition_creates_audit_entries(self, governor_v2, tmp_audit_dir):
         """Auto-transition should write audit entries for both transitions."""
         governor_v2.trigger_transition("pytest_fail")  # writing_tests → red → fixing_tests
-        audit_file = os.path.join(tmp_audit_dir, "v2-session.jsonl")
-        with open(audit_file) as f:
-            entries = [json.loads(line) for line in f if line.strip()]
+        audit_file = os.path.join(tmp_audit_dir, "v2-session.audit.json")
+        from governor.audit import read_audit_log
+        entries = read_audit_log(audit_file)
         # Should have entries for: writing_tests→red and red→fixing_tests
         assert len(entries) >= 2
         assert entries[0]["from_state"] == "writing_tests"
