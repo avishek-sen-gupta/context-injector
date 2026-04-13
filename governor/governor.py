@@ -864,6 +864,54 @@ def _print_audit():
     print()
 
 
+def _run_lint():
+    """Run lint rules on files matching the given patterns.
+
+    Usage: python3 -m governor lint <pattern> [pattern ...]
+    Patterns are shell globs (e.g. "*.py", "src/**/*.py").
+    """
+    import glob as globmod
+    from gates.lint import LintGate
+
+    patterns = sys.argv[2:]
+    if not patterns:
+        print("Usage: python3 -m governor lint <pattern> [pattern ...]", file=sys.stderr)
+        sys.exit(1)
+
+    files = []
+    for pattern in patterns:
+        matched = globmod.glob(pattern, recursive=True)
+        if not matched:
+            # Treat as literal path
+            if os.path.exists(pattern):
+                files.append(os.path.abspath(pattern))
+        else:
+            files.extend(os.path.abspath(f) for f in matched if os.path.isfile(f))
+
+    if not files:
+        print("No files matched the given patterns.", file=sys.stderr)
+        sys.exit(1)
+
+    gate = LintGate()
+    project_root = os.environ.get("CTX_CONTEXT_DIR", os.getcwd())
+    ctx = GateContext(
+        state_name="lint_check",
+        transition_name="lint_check",
+        recent_files=files,
+        recent_tools=[],
+        machine=None,
+        project_root=project_root,
+    )
+    result = gate.evaluate(ctx)
+
+    if result.verdict == GateVerdict.PASS:
+        print(f"Lint clean: {len(files)} file(s) checked, no violations.")
+        sys.exit(0)
+    else:
+        print(result.message)
+        sys.exit(1)
+
+
 def main():
     """CLI entry point: read JSON from stdin, write response to stdout.
 
@@ -873,8 +921,12 @@ def main():
       - 'status': print current governor state
       - 'context': print resolved context file paths for current state
       - 'audit': query and print audit entries as JSON
+      - 'lint <pattern> [...]': run lint rules on files matching patterns
     """
-    if len(sys.argv) >= 2 and sys.argv[1] == "audit":
+    if len(sys.argv) >= 2 and sys.argv[1] == "lint":
+        _run_lint()
+        return
+    elif len(sys.argv) >= 2 and sys.argv[1] == "audit":
         _print_audit()
         return
     elif len(sys.argv) >= 2 and sys.argv[1] == "status":
