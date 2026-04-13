@@ -628,6 +628,47 @@ def _print_status():
     print()
 
 
+def _print_context():
+    """Print resolved context file paths for the current state, one per line."""
+    import importlib
+
+    state_dir = os.environ.get("CTX_STATE_DIR", "/tmp/ctx-state")
+    context_dir = os.environ.get("CTX_CONTEXT_DIR", os.path.join(os.getcwd(), ".claude"))
+    project_hash = os.environ.get("CTX_PROJECT_HASH", "default")
+
+    state_file = os.path.join(state_dir, f"{project_hash}.json")
+    machine_file = os.path.join(state_dir, f"{project_hash}.machine")
+
+    if not os.path.exists(state_file):
+        return
+
+    state = load_state(state_file)
+    inner_state = state.get("inner_state")
+    if not inner_state:
+        return
+
+    machine_module = "machines.tdd.TDD"
+    if os.path.exists(machine_file):
+        machine_module = open(machine_file).read().strip()
+
+    module_path, class_name = machine_module.rsplit(".", 1)
+    mod = importlib.import_module(module_path)
+    machine_cls = getattr(mod, class_name)
+    machine = machine_cls()
+
+    patterns = machine.get_context(inner_state)
+    import glob as globmod
+    for pattern in patterns:
+        full_pattern = os.path.join(context_dir, pattern)
+        if "*" in pattern:
+            for path in sorted(globmod.glob(full_pattern)):
+                print(path)
+        else:
+            full_path = os.path.join(context_dir, pattern)
+            if os.path.exists(full_path):
+                print(full_path)
+
+
 def main():
     """CLI entry point: read JSON from stdin, write response to stdout.
 
@@ -635,9 +676,13 @@ def main():
       - Default (no args): evaluate a PreToolUse event
       - 'trigger <event_name>': fire a named transition (e.g. pytest_fail)
       - 'status': print current governor state
+      - 'context': print resolved context file paths for current state
     """
     if len(sys.argv) >= 2 and sys.argv[1] == "status":
         _print_status()
+        return
+    elif len(sys.argv) >= 2 and sys.argv[1] == "context":
+        _print_context()
         return
     elif len(sys.argv) >= 2 and sys.argv[1] == "session-instructions":
         event = json.load(sys.stdin)

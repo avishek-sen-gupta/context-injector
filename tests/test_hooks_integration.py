@@ -314,3 +314,79 @@ def test_status_cli_active(mock_project):
     assert status["machine"] == "machines.tdd.TDD"
     assert status["state"] == "fixing_tests"
     assert status["session_id"] == "test-session"
+
+
+def test_context_cli_returns_resolved_files(mock_project):
+    """Test that 'python3 -m governor context' returns resolved context file paths."""
+    env = os.environ.copy()
+    state_dir = os.path.join(mock_project, ".ctx-state")
+    context_dir = os.path.join(mock_project, ".claude")
+    os.makedirs(state_dir, exist_ok=True)
+    os.makedirs(os.path.join(context_dir, "core"), exist_ok=True)
+
+    project_hash = "context-test"
+    env["CTX_STATE_DIR"] = state_dir
+    env["CTX_PROJECT_HASH"] = project_hash
+    env["CTX_CONTEXT_DIR"] = context_dir
+
+    # Create machine file (TDD machine)
+    with open(os.path.join(state_dir, f"{project_hash}.machine"), "w") as f:
+        f.write("machines.tdd.TDD")
+
+    # Create state file in fixing_tests state (CONTEXT maps to ["core/*"])
+    with open(os.path.join(state_dir, f"{project_hash}.json"), "w") as f:
+        json.dump({
+            "inner_machine": "TDD",
+            "inner_state": "fixing_tests",
+            "session_id": "test-session",
+        }, f)
+
+    # Create context files that match "core/*"
+    with open(os.path.join(context_dir, "core", "workflow.md"), "w") as f:
+        f.write("# Workflow")
+    with open(os.path.join(context_dir, "core", "project.md"), "w") as f:
+        f.write("# Project")
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "context"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    paths = result.stdout.strip().splitlines()
+    assert len(paths) == 2
+    assert any("workflow.md" in p for p in paths)
+    assert any("project.md" in p for p in paths)
+
+
+def test_context_cli_no_state_file(mock_project):
+    """Test that 'python3 -m governor context' outputs nothing when no state file exists."""
+    env = os.environ.copy()
+    state_dir = os.path.join(mock_project, ".ctx-state")
+    os.makedirs(state_dir, exist_ok=True)
+
+    project_hash = "context-test-nostate"
+    env["CTX_STATE_DIR"] = state_dir
+    env["CTX_PROJECT_HASH"] = project_hash
+
+    # Create machine file but no state file
+    with open(os.path.join(state_dir, f"{project_hash}.machine"), "w") as f:
+        f.write("machines.tdd.TDD")
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "context"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert result.stdout.strip() == ""
