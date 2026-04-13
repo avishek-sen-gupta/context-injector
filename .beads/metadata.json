@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "context_injector",
+  "project_id": "0ae7ca41-06b3-4000-8021-06cfa01ce202"
+}
