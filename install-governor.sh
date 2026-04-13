@@ -21,6 +21,10 @@ if ! python3 -c "import statemachine" 2>/dev/null; then
   echo "Warning: python-statemachine not found. Install with: pip3 install python-statemachine>=3.0.0" >&2
 fi
 
+if ! python3 -c "import tinydb" 2>/dev/null; then
+  echo "Warning: tinydb not found. Install with: pip3 install tinydb>=4.0.0" >&2
+fi
+
 if [ ! -d "$PROJECT_DIR/.claude" ]; then
   echo "Error: no .claude/ directory found in $PROJECT_DIR. Run from a Claude Code project root." >&2
   exit 1
@@ -63,6 +67,14 @@ cp "$PLUGIN_DIR/machines/base.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/tdd_cycle.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/tdd.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/feature_development.py" "$MACHINES_DIR/"
+
+# --- install gates ---
+echo "Installing gates..."
+GATES_DIR="$HOME/.claude/plugins/context-injector/gates"
+mkdir -p "$GATES_DIR"
+cp "$PLUGIN_DIR/gates/__init__.py" "$GATES_DIR/"
+cp "$PLUGIN_DIR/gates/base.py" "$GATES_DIR/"
+cp "$PLUGIN_DIR/gates/test_quality.py" "$GATES_DIR/"
 
 # --- create settings.json if missing ---
 if [ ! -f "$SETTINGS" ]; then
