@@ -71,6 +71,10 @@ if [ -d ~/.claude/plugins/context-injector/gates ]; then
   rm -rf ~/.claude/plugins/context-injector/gates
   echo "Removed gate definitions."
 fi
+if [ -f ~/.claude/plugins/context-injector/config.json ]; then
+  rm -f ~/.claude/plugins/context-injector/config.json
+  echo "Removed plugin config."
+fi
 if [ -d ~/.claude/plugins/context-injector/scripts ]; then
   rm -rf ~/.claude/plugins/context-injector/scripts
   echo "Removed lint rules."

@@ -72,7 +72,6 @@ export CTX_STATE_DIR="/tmp/ctx-state"
 export CTX_AUDIT_DIR="$PWD/.claude/audit"
 export CTX_CONTEXT_DIR="$PWD/.claude"
 export CTX_PROJECT_HASH="$(project_hash "$PWD")"
-export CTX_LINT_RULES_DIR="$PLUGIN_DIR/scripts/lint"
 
 # Read machine config
 MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"

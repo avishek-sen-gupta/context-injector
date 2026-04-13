@@ -83,36 +83,86 @@ class TestResolveRulesDir:
         gate = LintGate()
         assert gate._resolve_rules_dir(str(tmp_path)) == str(lint_dir)
 
-    def test_falls_back_to_env_var(self, tmp_path, monkeypatch):
-        """When project has no scripts/lint/, falls back to CTX_LINT_RULES_DIR."""
-        env_lint = tmp_path / "installed" / "scripts" / "lint"
-        env_lint.mkdir(parents=True)
-        (env_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
-        monkeypatch.setenv("CTX_LINT_RULES_DIR", str(env_lint))
+    def test_falls_back_to_config_file(self, tmp_path, monkeypatch):
+        """When project has no scripts/lint/, falls back to config.json."""
+        config_lint = tmp_path / "installed" / "scripts" / "lint"
+        config_lint.mkdir(parents=True)
+        (config_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        # Write config.json next to the gates/ package (parent of __file__)
+        gates_dir = os.path.dirname(os.path.abspath(LintGate.__module__.replace(".", "/") + ".py"))
+        config_path = os.path.join(os.path.dirname(gates_dir), "config.json")
+        monkeypatch.setattr(
+            LintGate, "_read_config_rules_dir",
+            staticmethod(lambda: str(config_lint)),
+        )
         gate = LintGate()
         empty_project = tmp_path / "empty_project"
         empty_project.mkdir()
         result = gate._resolve_rules_dir(str(empty_project))
-        assert result == str(env_lint)
+        assert result == str(config_lint)
 
-    def test_project_local_takes_priority_over_env(self, tmp_path, monkeypatch):
-        """Project-local scripts/lint/ wins over CTX_LINT_RULES_DIR."""
+    def test_project_local_takes_priority_over_config(self, tmp_path, monkeypatch):
+        """Project-local scripts/lint/ wins over config.json."""
         project_lint = tmp_path / "scripts" / "lint"
         project_lint.mkdir(parents=True)
         (project_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
-        env_lint = tmp_path / "installed" / "scripts" / "lint"
-        env_lint.mkdir(parents=True)
-        (env_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
-        monkeypatch.setenv("CTX_LINT_RULES_DIR", str(env_lint))
+        config_lint = tmp_path / "installed" / "scripts" / "lint"
+        config_lint.mkdir(parents=True)
+        (config_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        monkeypatch.setattr(
+            LintGate, "_read_config_rules_dir",
+            staticmethod(lambda: str(config_lint)),
+        )
         gate = LintGate()
         result = gate._resolve_rules_dir(str(tmp_path))
         assert result == str(project_lint)
 
     def test_returns_none_when_no_rules_found(self, tmp_path, monkeypatch):
-        """When neither project nor env has rules, returns None."""
-        monkeypatch.delenv("CTX_LINT_RULES_DIR", raising=False)
+        """When neither project nor config has rules, returns None."""
+        monkeypatch.setattr(
+            LintGate, "_read_config_rules_dir",
+            staticmethod(lambda: None),
+        )
         gate = LintGate()
         assert gate._resolve_rules_dir(str(tmp_path)) is None
+
+    def test_read_config_rules_dir_parses_json(self, tmp_path, monkeypatch):
+        """_read_config_rules_dir reads lint_rules_dir from config.json."""
+        # Point __file__ resolution to tmp_path/gates/lint.py
+        config = tmp_path / "config.json"
+        config.write_text('{"lint_rules_dir": "/some/path"}')
+        gates_dir = tmp_path / "gates"
+        gates_dir.mkdir()
+        monkeypatch.setattr(
+            "gates.lint.os.path.abspath",
+            lambda p: str(gates_dir / "lint.py") if "lint" in p else os.path.abspath(p),
+        )
+        # Simpler: just test the method directly with a real config
+        import gates.lint as lint_mod
+        orig_file = lint_mod.__file__
+        # Create config.json at the expected location relative to gates/
+        parent = os.path.dirname(os.path.dirname(os.path.abspath(orig_file)))
+        config_path = os.path.join(parent, "config.json")
+        existed = os.path.exists(config_path)
+        try:
+            with open(config_path, "w") as f:
+                f.write('{"lint_rules_dir": "/test/rules/path"}')
+            result = LintGate._read_config_rules_dir()
+            assert result == "/test/rules/path"
+        finally:
+            if not existed:
+                os.remove(config_path)
+
+    def test_read_config_returns_none_when_missing(self, tmp_path, monkeypatch):
+        """_read_config_rules_dir returns None when config.json doesn't exist."""
+        # Point to a nonexistent parent
+        fake_gates = tmp_path / "nonexistent" / "gates"
+        monkeypatch.setattr(
+            "gates.lint.os.path.abspath",
+            lambda p: str(fake_gates / "lint.py"),
+        )
+        result = LintGate._read_config_rules_dir()
+        assert result is None
 
 
 class TestLintGateWithoutSg:

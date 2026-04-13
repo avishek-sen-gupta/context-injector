@@ -84,6 +84,12 @@ mkdir -p "$LINT_DIR"
 cp "$PLUGIN_DIR/scripts/lint/sgconfig.yml" "$HOME/.claude/plugins/context-injector/scripts/lint/"
 cp "$PLUGIN_DIR/scripts/lint/rules/"*.yml "$LINT_DIR/"
 
+# --- write plugin config ---
+echo "Writing plugin config..."
+CONFIG_FILE="$HOME/.claude/plugins/context-injector/config.json"
+LINT_RULES_PATH="$HOME/.claude/plugins/context-injector/scripts/lint"
+printf '{"lint_rules_dir": "%s"}\n' "$LINT_RULES_PATH" > "$CONFIG_FILE"
+
 # --- create settings.json if missing ---
 if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"

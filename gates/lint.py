@@ -66,20 +66,35 @@ class LintGate(Gate):
         """Find the lint rules directory.
 
         Searches in order: explicit rules_dir, project-local scripts/lint/,
-        then CTX_LINT_RULES_DIR (set by the governor hooks at install time).
+        then lint_rules_dir from the plugin config.json (written at install time).
         """
         if self.rules_dir:
             return self.rules_dir
         candidates = [
             os.path.join(project_root, "scripts", "lint"),
         ]
-        env_dir = os.environ.get("CTX_LINT_RULES_DIR")
-        if env_dir:
-            candidates.append(env_dir)
+        config_dir = self._read_config_rules_dir()
+        if config_dir:
+            candidates.append(config_dir)
         for candidate in candidates:
             if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "sgconfig.yml")):
                 return candidate
         return None
+
+    @staticmethod
+    def _read_config_rules_dir() -> str | None:
+        """Read lint_rules_dir from the plugin config.json."""
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "config.json",
+        )
+        if not os.path.exists(config_path):
+            return None
+        try:
+            with open(config_path) as f:
+                return json.load(f).get("lint_rules_dir")
+        except (json.JSONDecodeError, OSError):
+            return None
 
     @staticmethod
     def _run_sg(sg_path: str, rules_dir: str, files: list[str]) -> list[dict]:
