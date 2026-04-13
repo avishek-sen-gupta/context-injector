@@ -54,6 +54,37 @@ When a tool violates the current state's rules, the governor doesn't always hard
 
 This means the governor can be strict where it matters (e.g., no production code during test-writing) and lenient where rigid enforcement would slow things down.
 
+### Transition guards (gates)
+
+Gates are transition guards — they run when a transition is about to fire, after preconditions pass but before the transition executes. Each gate inspects the work done during the current state and returns a verdict:
+
+| Verdict | Behavior |
+|---|---|
+| `PASS` | Transition proceeds |
+| `FAIL` | Blocked per gate softness (graduated response) |
+| `REVIEW` | Injects a review prompt — agent must self-review, then retry |
+
+**Built-in gate: TestQualityGate** — runs on `pytest_fail` in the TDD machine. Uses AST analysis to detect structurally invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
+
+Machines register gates via `GUARDS` and `GATE_SOFTNESS`:
+
+```python
+GUARDS = {
+    "pytest_fail": [TestQualityGate],
+}
+GATE_SOFTNESS = {
+    "test_quality": 0.1,   # Strict — override per project
+}
+```
+
+**Audit queries:**
+
+```bash
+governor audit --gate test_quality --verdict fail
+governor audit --type gate_eval --limit 20
+governor audit --all
+```
+
 ### TDD cycle
 
 The default machine enforces a strict red-green TDD loop:
@@ -129,7 +160,9 @@ Place it in `machines/` and set `CTX_MACHINE` to its dotted path (e.g., `machine
 
 ### Audit trail
 
-Each governor evaluation appends a JSON line to `$CTX_AUDIT_DIR/<session_id>.jsonl` with: timestamp, from/to state, trigger type, softness, action taken, tool name, and context files injected.
+Each governor evaluation is stored in a TinyDB document database at `$CTX_AUDIT_DIR/<session_id>.audit.json`. Documents include: timestamp, from/to state, trigger type, softness, action taken, tool name, and gate evaluation results.
+
+Query the audit trail via `governor audit` — see Transition guards section above.
 
 ### Environment variables
 
@@ -198,7 +231,7 @@ When both are active, context injection adds keyword-matched files via `UserProm
 
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
 - `jq` (for the automated installers)
-- Python 3 with `python-statemachine>=3.0.0` (governor only)
+- Python 3 with `python-statemachine>=3.0.0` and `tinydb>=4.0.0` (governor only)
 
 ## Installation
 
