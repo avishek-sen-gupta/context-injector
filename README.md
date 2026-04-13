@@ -64,16 +64,21 @@ Gates are transition guards — they run when a transition is about to fire, aft
 | `FAIL` | Blocked per gate softness (graduated response) |
 | `REVIEW` | Injects a review prompt — agent must self-review, then retry |
 
-**Built-in gate: TestQualityGate** — runs on `pytest_fail` in the TDD machine. Uses AST analysis to detect structurally invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
+**Built-in gates:**
+
+- **TestQualityGate** — runs on `pytest_fail` in the TDD machine. Uses AST analysis to detect structurally invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
+- **LintGate** — runs on `pytest_pass` in the TDD machine. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
 
 Machines register gates via `GUARDS` and `GATE_SOFTNESS`:
 
 ```python
 GUARDS = {
     "pytest_fail": [TestQualityGate],
+    "pytest_pass": [LintGate],
 }
 GATE_SOFTNESS = {
     "test_quality": 0.1,   # Strict — override per project
+    "lint": 0.1,
 }
 ```
 
@@ -232,6 +237,7 @@ When both are active, context injection adds keyword-matched files via `UserProm
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
 - `jq` (for the automated installers)
 - Python 3 with `python-statemachine>=3.0.0` and `tinydb>=4.0.0` (governor only)
+- [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for LintGate; gate passes silently if not installed
 
 ## Installation
 

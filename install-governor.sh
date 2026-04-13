@@ -75,6 +75,7 @@ mkdir -p "$GATES_DIR"
 cp "$PLUGIN_DIR/gates/__init__.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/base.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/test_quality.py" "$GATES_DIR/"
+cp "$PLUGIN_DIR/gates/lint.py" "$GATES_DIR/"
 
 # --- create settings.json if missing ---
 if [ ! -f "$SETTINGS" ]; then

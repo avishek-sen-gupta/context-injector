@@ -2,6 +2,7 @@ import pytest
 from statemachine.exceptions import TransitionNotAllowed
 
 from machines.tdd import TDD
+from gates.lint import LintGate
 from gates.test_quality import TestQualityGate
 
 
@@ -187,7 +188,12 @@ class TestGuards:
         softness = m.get_gate_softness("test_quality")
         assert softness == 0.1
 
-    def test_tdd_no_guards_for_pytest_pass(self):
+    def test_tdd_has_lint_gate_for_pytest_pass(self):
         m = TDD()
         guards = m.get_guards("pytest_pass")
-        assert guards == []
+        assert LintGate in guards
+
+    def test_tdd_has_gate_softness_for_lint(self):
+        m = TDD()
+        softness = m.get_gate_softness("lint")
+        assert softness == 0.1
