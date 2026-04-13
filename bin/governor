@@ -26,6 +26,26 @@ case "$ARG" in
     CTX_AUDIT_DIR="${CTX_AUDIT_DIR:-$PWD/.claude/audit}" \
       PYTHONPATH="$PLUGIN_DIR" python3 -m governor audit "$@"
     ;;
+  trigger)
+    shift  # remove 'trigger'
+    EVENT_NAME="$1"
+    if [ -z "$EVENT_NAME" ]; then
+      echo "Usage: governor trigger <event_name>" >&2
+      exit 1
+    fi
+    # Read machine config
+    MACHINE_FILE="$STATE_DIR/$PROJECT_HASH.machine"
+    if [ -f "$MACHINE_FILE" ]; then
+      CTX_MACHINE="$(cat "$MACHINE_FILE")"
+    else
+      CTX_MACHINE="machines.tdd.TDD"
+    fi
+    printf '{"session_id":"cli"}' | \
+      CTX_STATE_DIR="$STATE_DIR" CTX_PROJECT_HASH="$PROJECT_HASH" \
+      CTX_AUDIT_DIR="${CTX_AUDIT_DIR:-$PWD/.claude/audit}" \
+      CTX_MACHINE="$CTX_MACHINE" \
+      PYTHONPATH="$PLUGIN_DIR" python3 -m governor trigger "$EVENT_NAME"
+    ;;
   lint)
     shift  # remove 'lint'
     PYTHONPATH="$PLUGIN_DIR" python3 -m governor lint "$@"

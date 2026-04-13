@@ -114,6 +114,24 @@ class TestTransitions:
         with pytest.raises(TransitionNotAllowed):
             sm.pytest_pass()
 
+    def test_fixing_tests_to_writing_tests_on_add_tests(self):
+        sm = TDD()
+        sm.pytest_fail()  # → red
+        sm.start_fixing()  # → fixing_tests
+        sm.add_tests()
+        assert sm.current_state_name == "writing_tests"
+
+    def test_add_tests_not_allowed_from_writing_tests(self):
+        sm = TDD()
+        with pytest.raises(TransitionNotAllowed):
+            sm.add_tests()
+
+    def test_add_tests_not_allowed_from_green(self):
+        sm = TDD()
+        sm.pytest_pass()  # → green
+        with pytest.raises(TransitionNotAllowed):
+            sm.add_tests()
+
     def test_cannot_go_from_fixing_tests_to_linting(self):
         sm = TDD()
         sm.pytest_fail()
@@ -197,6 +215,7 @@ class TestSoftness:
         assert sm.get_softness("start_linting") == 1.0
         assert sm.get_softness("lint_pass") == 1.0
         assert sm.get_softness("lint_fail") == 1.0
+        assert sm.get_softness("add_tests") == 1.0
 
 
 class TestSessionInstructions:

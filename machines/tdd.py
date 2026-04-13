@@ -30,6 +30,9 @@ class TDD(GovernedMachine):
     start_fixing = red.to(fixing_tests)
     start_linting = green.to(linting)
 
+    # Voluntary transition: go back to writing tests from fixing_tests
+    add_tests = fixing_tests.to(writing_tests)
+
     # Lint transitions (fired by governor CHECK_STATES)
     lint_pass = linting.to(writing_tests) | fixing_lint.to(writing_tests)
     lint_fail = linting.to(fixing_lint) | fixing_lint.to(fixing_lint)
@@ -41,6 +44,7 @@ class TDD(GovernedMachine):
         "start_linting": 1.0,
         "lint_pass": 1.0,
         "lint_fail": 1.0,
+        "add_tests": 1.0,
     }
 
     CONTEXT = {
@@ -109,6 +113,7 @@ Phase transitions are **automatic** — driven by pytest results and lint checks
 
 **Cycle:** writing_tests → (pytest fails) → fixing_tests → (pytest passes) → linting → writing_tests
 **Lint violations:** linting → fixing_lint → (fix code) → writing_tests
+**Add more tests:** fixing_tests → (`/governor trigger add_tests`) → writing_tests
 
 ### Rules
 
@@ -125,4 +130,5 @@ Phase transitions are **automatic** — driven by pytest results and lint checks
 - The governor **blocks** disallowed tools (not just warns)
 - Transitions are automatic — pytest results and lint checks drive them
 - **Do NOT run ast-grep, lint, or any lint-checking commands manually.** The governor runs lint automatically when tests pass. You will be told the results.
-- Lint violations must be fixed before starting the next test cycle"""
+- Lint violations must be fixed before starting the next test cycle
+- If the user asks to write more tests, add test cases, or go back to the test-writing phase while in fixing_tests, run `/governor trigger add_tests` to transition back to writing_tests"""

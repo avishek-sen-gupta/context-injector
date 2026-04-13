@@ -21,6 +21,7 @@ The governor wraps Claude Code in a state machine. Every tool call is evaluated 
 | `/governor feature` | Enable with Feature Development machine |
 | `/governor off` | Disable |
 | `/governor status` | Show current machine and state (JSON) |
+| `/governor trigger <event>` | Fire a named transition (e.g. `add_tests`) |
 
 ### How it works
 
@@ -117,17 +118,19 @@ writing_tests → (pytest fails) → red → (auto) → fixing_tests
       ↑                                               ↓
       ├──── (lint pass) ← linting ← green ← (pytest passes)
       │                      ↓
-      └── (lint pass) ← fixing_lint ← (lint fail)
+      ├── (lint pass) ← fixing_lint ← (lint fail)
+      │
+      └── (add_tests) ←── fixing_tests  [voluntary]
 ```
 
 - **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited.
 - **red**: Transient — auto-advances to `fixing_tests`.
-- **fixing_tests**: Write production code to make tests pass. All files editable.
+- **fixing_tests**: Write production code to make tests pass. All files editable. Say "I want to add more tests" or use `/governor trigger add_tests` to return to writing tests.
 - **green**: Transient — auto-advances to `linting`.
 - **linting**: Transient — runs LintGate and ReassignmentGate on modified files. Auto-advances to `writing_tests` (clean) or `fixing_lint` (violations).
 - **fixing_lint**: Fix lint violations. All files editable. Returns to `writing_tests` when lint passes.
 
-Transitions are **automatic** — driven by pytest results, not manual declarations.
+Transitions are **automatic** — driven by pytest results, not manual declarations. The one exception is `add_tests`, a voluntary transition from `fixing_tests` back to `writing_tests` — triggered by asking the LLM to add more tests, or via `/governor trigger add_tests`.
 
 ### Pytest detection
 
