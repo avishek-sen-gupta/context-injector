@@ -8,6 +8,7 @@ from statemachine import State
 
 from machines.base import GovernedMachine
 from gates.lint import LintGate
+from gates.reassignment import ReassignmentGate
 from gates.test_quality import TestQualityGate
 
 
@@ -80,7 +81,7 @@ class TDD(GovernedMachine):
     # Conditional auto-advance: gate runs on entry, result picks transition
     CHECK_STATES = {
         "linting": {
-            "gate": LintGate,
+            "gate": [LintGate, ReassignmentGate],
             "pass_event": "lint_pass",
             "fail_event": "lint_fail",
         },

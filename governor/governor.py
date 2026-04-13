@@ -218,30 +218,44 @@ class Governor:
 
         while mid_state in auto_transitions or mid_state in check_states:
             if mid_state in check_states:
-                # Conditional auto-advance: run gate, pick transition
+                # Conditional auto-advance: run gate(s), pick transition
                 config = check_states[mid_state]
-                gate = config["gate"]()
-                ctx = self._build_gate_context(event_name)
-                result = gate.evaluate(ctx)
+                gate_spec = config["gate"]
+                gate_classes = gate_spec if isinstance(gate_spec, list) else [gate_spec]
 
-                if result.verdict == GateVerdict.PASS:
+                ctx = self._build_gate_context(event_name)
+                all_passed = True
+                failure_messages = []
+                all_issues = []
+
+                for gate_cls in gate_classes:
+                    gate = gate_cls()
+                    result = gate.evaluate(ctx)
+
+                    # Audit each gate check
+                    gate_audit = {
+                        "timestamp": timestamp,
+                        "session_id": self.session_id,
+                        "machine": type(self.machine).__name__,
+                        "type": "check_state_gate",
+                        "from_state": mid_state,
+                        "gate": gate.name,
+                        "verdict": result.verdict.value,
+                        "issues": result.issues,
+                    }
+                    write_audit_entry(self._audit_file, gate_audit)
+
+                    if result.verdict != GateVerdict.PASS:
+                        all_passed = False
+                        if result.message:
+                            failure_messages.append(result.message)
+                        all_issues.extend(result.issues)
+
+                if all_passed:
                     auto_event = config["pass_event"]
                 else:
                     auto_event = config["fail_event"]
-                    check_failure_message = result.message
-
-                # Audit the gate check
-                gate_audit = {
-                    "timestamp": timestamp,
-                    "session_id": self.session_id,
-                    "machine": type(self.machine).__name__,
-                    "type": "check_state_gate",
-                    "from_state": mid_state,
-                    "gate": gate.name,
-                    "verdict": result.verdict.value,
-                    "issues": result.issues,
-                }
-                write_audit_entry(self._audit_file, gate_audit)
+                    check_failure_message = "\n\n".join(failure_messages)
             elif mid_state in auto_transitions:
                 auto_event = auto_transitions[mid_state]
             else:
@@ -872,6 +886,7 @@ def _run_lint():
     """
     import glob as globmod
     from gates.lint import LintGate
+    from gates.reassignment import ReassignmentGate
 
     patterns = sys.argv[2:]
     if not patterns:
@@ -892,7 +907,6 @@ def _run_lint():
         print("No files matched the given patterns.", file=sys.stderr)
         sys.exit(1)
 
-    gate = LintGate()
     project_root = os.environ.get("CTX_CONTEXT_DIR", os.getcwd())
     ctx = GateContext(
         state_name="lint_check",
@@ -902,13 +916,18 @@ def _run_lint():
         machine=None,
         project_root=project_root,
     )
-    result = gate.evaluate(ctx)
 
-    if result.verdict == GateVerdict.PASS:
+    failure_messages = []
+    for gate_cls in [LintGate, ReassignmentGate]:
+        result = gate_cls().evaluate(ctx)
+        if result.verdict != GateVerdict.PASS and result.message:
+            failure_messages.append(result.message)
+
+    if not failure_messages:
         print(f"Lint clean: {len(files)} file(s) checked, no violations.")
         sys.exit(0)
     else:
-        print(result.message)
+        print("\n\n".join(failure_messages))
         sys.exit(1)
 
 

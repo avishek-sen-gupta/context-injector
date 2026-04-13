@@ -381,3 +381,107 @@ class TestGatesOnTranscriptDetection:
         })
         # State should NOT have changed because gate blocks
         assert gov.machine.current_state_name == "writing_tests"
+
+
+class ToggleGate2(Gate):
+    """Second toggleable gate for multi-gate tests."""
+    name = "toggle2"
+    _verdict = GateVerdict.FAIL
+
+    def evaluate(self, ctx):
+        if self._verdict == GateVerdict.PASS:
+            return GateResult(GateVerdict.PASS)
+        return GateResult(GateVerdict.FAIL, message="reassignment violations", issues=["reassign_1"])
+
+    @classmethod
+    def set_pass(cls):
+        cls._verdict = GateVerdict.PASS
+
+    @classmethod
+    def set_fail(cls):
+        cls._verdict = GateVerdict.FAIL
+
+
+class MultiGateCheckTDD(TDD):
+    """TDD subclass with multiple gates in CHECK_STATES."""
+    CHECK_STATES = {
+        "linting": {
+            "gate": [ToggleGate, ToggleGate2],
+            "pass_event": "lint_pass",
+            "fail_event": "lint_fail",
+        },
+    }
+
+
+@pytest.fixture
+def multi_gate_governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir, reset_toggle_gate):
+    ToggleGate2.set_fail()
+    gov = Governor(
+        machine=MultiGateCheckTDD(),
+        state_dir=tmp_state_dir,
+        audit_dir=tmp_audit_dir,
+        context_dir=tmp_context_dir,
+        project_hash="multitest",
+        session_id="multi-session",
+    )
+    yield gov
+    ToggleGate2.set_fail()
+
+
+class TestMultiGateCheckStates:
+    """Multiple gates in CHECK_STATES must all pass for lint_pass."""
+
+    def _setup_with_files(self, gov):
+        gov.trigger_transition("pytest_fail")
+        gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/widget.py"},
+            "session_id": "multi-session",
+            "timestamp": "2026-04-13T11:59:00Z",
+        })
+
+    def test_both_pass_goes_to_writing_tests(self, multi_gate_governor):
+        self._setup_with_files(multi_gate_governor)
+        ToggleGate.set_pass()
+        ToggleGate2.set_pass()
+        result = multi_gate_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "writing_tests"
+
+    def test_first_fails_goes_to_fixing_lint(self, multi_gate_governor):
+        self._setup_with_files(multi_gate_governor)
+        ToggleGate.set_fail()
+        ToggleGate2.set_pass()
+        result = multi_gate_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "fixing_lint"
+
+    def test_second_fails_goes_to_fixing_lint(self, multi_gate_governor):
+        self._setup_with_files(multi_gate_governor)
+        ToggleGate.set_pass()
+        ToggleGate2.set_fail()
+        result = multi_gate_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "fixing_lint"
+
+    def test_both_fail_merges_issues(self, multi_gate_governor):
+        self._setup_with_files(multi_gate_governor)
+        ToggleGate.set_fail()
+        ToggleGate2.set_fail()
+        result = multi_gate_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "fixing_lint"
+        msg = result.get("message", "")
+        assert "lint violations" in msg
+        assert "reassignment violations" in msg
+
+    def test_single_gate_backward_compatible(self, check_governor):
+        """Single gate (not a list) still works as before."""
+        check_governor.trigger_transition("pytest_fail")
+        check_governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/widget.py"},
+            "session_id": "check-session",
+            "timestamp": "2026-04-13T11:59:00Z",
+        })
+        ToggleGate.set_pass()
+        result = check_governor.trigger_transition("pytest_pass")
+        assert result["current_state"] == "writing_tests"

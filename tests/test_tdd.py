@@ -3,6 +3,7 @@ from statemachine.exceptions import TransitionNotAllowed
 
 from machines.tdd import TDD
 from gates.lint import LintGate
+from gates.reassignment import ReassignmentGate
 from gates.test_quality import TestQualityGate
 
 
@@ -230,7 +231,7 @@ class TestGuards:
     def test_lint_gate_in_check_states(self):
         m = TDD()
         assert "linting" in m.CHECK_STATES
-        assert m.CHECK_STATES["linting"]["gate"] is LintGate
+        assert m.CHECK_STATES["linting"]["gate"] == [LintGate, ReassignmentGate]
         assert m.CHECK_STATES["linting"]["pass_event"] == "lint_pass"
         assert m.CHECK_STATES["linting"]["fail_event"] == "lint_fail"
 
