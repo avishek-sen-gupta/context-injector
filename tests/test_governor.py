@@ -349,3 +349,35 @@ class TestStatePersistence:
         with open(state_file) as f:
             state = json.load(f)
         assert state["inner_state"] == "green"
+
+
+class TestToolSignatures:
+    def test_write_tool_records_full_path(self, governor):
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        assert any("/project/tests/test_foo.py" in t for t in governor._recent_tools)
+
+    def test_edit_tool_records_full_path(self, governor):
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "/project/src/widget.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        assert any("/project/src/widget.py" in t for t in governor._recent_tools)
+
+    def test_bash_tool_records_command(self, governor):
+        governor.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest tests/ -v"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        assert any("pytest tests/ -v" in t for t in governor._recent_tools)

@@ -98,7 +98,7 @@ class Governor:
                 tool_sig = f"Bash({command})"
             else:
                 file_path = tool_input.get("file_path", "")
-                tool_sig = f"{tool_name}({os.path.basename(file_path)})"
+                tool_sig = f"{tool_name}({file_path})"
             self._recent_tools.append(tool_sig)
 
             action, message = self._check_tool_against_state(tool_name, tool_input)
@@ -429,8 +429,15 @@ class Governor:
     def _check_preconditions(self, required_patterns: list[str]) -> bool:
         """Check if any recent tool use matches at least one required pattern."""
         for tool_sig in self._recent_tools:
+            # Create basename version for pattern matching
+            # e.g. Write(/project/tests/test_foo.py) -> Write(test_foo.py)
+            basename_sig = tool_sig
+            if "(" in tool_sig and not tool_sig.startswith("Bash("):
+                name, inner = tool_sig.split("(", 1)
+                inner = inner.rstrip(")")
+                basename_sig = f"{name}({os.path.basename(inner)})"
             for pattern in required_patterns:
-                if fnmatch.fnmatch(tool_sig, pattern):
+                if fnmatch.fnmatch(tool_sig, pattern) or fnmatch.fnmatch(basename_sig, pattern):
                     return True
         return False
 
