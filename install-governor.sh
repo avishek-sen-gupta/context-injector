@@ -25,6 +25,10 @@ if ! python3 -c "import tinydb" 2>/dev/null; then
   echo "Warning: tinydb not found. Install with: pip3 install tinydb>=4.0.0" >&2
 fi
 
+if ! python3 -c "import beniget" 2>/dev/null; then
+  echo "Warning: beniget not found (needed by ReassignmentGate). Install with: pip3 install beniget>=0.5.0" >&2
+fi
+
 if [ ! -d "$PROJECT_DIR/.claude" ]; then
   echo "Error: no .claude/ directory found in $PROJECT_DIR. Run from a Claude Code project root." >&2
   exit 1
@@ -76,6 +80,7 @@ cp "$PLUGIN_DIR/gates/__init__.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/base.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/test_quality.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/lint.py" "$GATES_DIR/"
+cp "$PLUGIN_DIR/gates/reassignment.py" "$GATES_DIR/"
 
 # --- install lint rules ---
 echo "Installing lint rules..."
