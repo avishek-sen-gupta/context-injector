@@ -172,7 +172,12 @@ class Governor:
                 "context_to_inject": [],
             }
 
-        # Run gates before firing the transition
+        # Run exit guards for the current state before leaving it
+        exit_response = self._evaluate_exit_guards(from_state, event_name, timestamp)
+        if exit_response is not None:
+            return exit_response
+
+        # Run event-keyed gates before firing the transition
         gate_response = self._evaluate_gates(event_name, timestamp)
         if gate_response is not None:
             return gate_response
@@ -300,6 +305,9 @@ class Governor:
         guards = self.machine.get_guards(event_name)
         for gate_cls in guards:
             self._gate_attempts.pop(gate_cls().name, None)
+        exit_guards = self.machine.get_exit_guards(from_state)
+        for gate_cls in exit_guards:
+            self._gate_attempts.pop(gate_cls().name, None)
 
         return {
             "current_state": final_state,
@@ -408,6 +416,86 @@ class Governor:
 
         return None  # All gates passed
 
+    def _evaluate_exit_guards(self, state_name: str, event_name: str, timestamp: str) -> dict | None:
+        """Run exit guards for a state. Returns a response dict if blocked, else None."""
+        guards = self.machine.get_exit_guards(state_name)
+        if not guards:
+            return None
+
+        ctx = self._build_gate_context(event_name)
+        for gate_cls in guards:
+            gate = gate_cls()
+            result = gate.evaluate(ctx)
+
+            gate_audit = {
+                "timestamp": timestamp,
+                "session_id": self.session_id,
+                "machine": type(self.machine).__name__,
+                "type": "exit_guard_eval",
+                "from_state": state_name,
+                "to_state": None,
+                "trigger": event_name,
+                "gate": gate.name,
+                "verdict": result.verdict.value,
+                "issues": result.issues,
+                "attempt": self._gate_attempts.get(gate.name, {}).get("count", 0) + 1,
+            }
+            write_audit_entry(self._audit_file, gate_audit)
+
+            if result.verdict == GateVerdict.FAIL:
+                softness = self.machine.get_gate_softness(gate.name)
+                if softness >= SOFTNESS_ALLOW:
+                    return None
+                elif softness >= SOFTNESS_REMIND:
+                    return {
+                        "current_state": state_name,
+                        "transition": None,
+                        "action": "remind",
+                        "message": result.message,
+                        "context_to_inject": [],
+                        "gate_results": {gate.name: {"verdict": "fail", "issues": result.issues}},
+                    }
+                else:
+                    return {
+                        "current_state": state_name,
+                        "transition": None,
+                        "action": "challenge",
+                        "message": result.message,
+                        "context_to_inject": [],
+                        "gate_results": {gate.name: {"verdict": "fail", "issues": result.issues}},
+                    }
+
+            if result.verdict == GateVerdict.REVIEW:
+                attempts = self._gate_attempts.get(gate.name, {})
+                count = attempts.get("count", 0) + 1
+                self._gate_attempts[gate.name] = {
+                    "count": count,
+                    "last_issues": result.issues,
+                }
+                self._persist_state(state_name, timestamp)
+
+                if count >= 3:
+                    self._gate_attempts.pop(gate.name, None)
+                    return None
+
+                msg = result.message
+                if count == 2:
+                    msg = (
+                        f"This is the second time this gate flagged the same issue. "
+                        f"{result.message}"
+                    )
+
+                return {
+                    "current_state": state_name,
+                    "transition": None,
+                    "action": "review",
+                    "message": msg,
+                    "context_to_inject": [],
+                    "gate_results": {gate.name: {"verdict": "review", "issues": result.issues, "attempt": count}},
+                }
+
+        return None
+
     def _extract_declaration(self, tool_name: str, tool_input: dict) -> dict | None:
         """Extract a DeclarePhase declaration from a Bash echo command."""
         if tool_name != "Bash":
@@ -452,7 +540,19 @@ class Governor:
 
                 softness = self.machine.get_softness(transition_name)
 
-                # Run gates before firing
+                # Run exit guards for the current state
+                exit_response = self._evaluate_exit_guards(
+                    self.machine.current_state_name, transition_name,
+                    datetime.now(timezone.utc).isoformat())
+                if exit_response is not None:
+                    return (
+                        transition_name,
+                        softness,
+                        exit_response["action"],
+                        exit_response["message"],
+                    )
+
+                # Run event-keyed gates before firing
                 gate_response = self._evaluate_gates(transition_name,
                     datetime.now(timezone.utc).isoformat())
                 if gate_response is not None:

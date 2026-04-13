@@ -383,6 +383,133 @@ class TestGatesOnTranscriptDetection:
         assert gov.machine.current_state_name == "writing_tests"
 
 
+class ExitGuardFailTDD(TDD):
+    """TDD with a failing exit guard on writing_tests."""
+    GUARDS = {}  # Remove event-based guard
+    EXIT_GUARDS = {
+        "writing_tests": [AlwaysFailGate],
+    }
+    GATE_SOFTNESS = {
+        "always_fail": 0.1,
+    }
+
+
+class ExitGuardPassTDD(TDD):
+    """TDD with a passing exit guard on writing_tests."""
+    GUARDS = {}
+    EXIT_GUARDS = {
+        "writing_tests": [AlwaysPassGate],
+    }
+    GATE_SOFTNESS = {
+        "always_pass": 0.1,
+    }
+
+
+class ExitGuardReviewTDD(TDD):
+    """TDD with a review exit guard on writing_tests."""
+    GUARDS = {}
+    EXIT_GUARDS = {
+        "writing_tests": [AlwaysReviewGate],
+    }
+    GATE_SOFTNESS = {
+        "always_review": 0.1,
+    }
+
+
+@pytest.fixture
+def exit_guard_fail_governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+    return Governor(
+        machine=ExitGuardFailTDD(),
+        state_dir=tmp_state_dir,
+        audit_dir=tmp_audit_dir,
+        context_dir=tmp_context_dir,
+        project_hash="testhash",
+        session_id="test-session",
+    )
+
+
+@pytest.fixture
+def exit_guard_pass_governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+    return Governor(
+        machine=ExitGuardPassTDD(),
+        state_dir=tmp_state_dir,
+        audit_dir=tmp_audit_dir,
+        context_dir=tmp_context_dir,
+        project_hash="testhash",
+        session_id="test-session",
+    )
+
+
+@pytest.fixture
+def exit_guard_review_governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+    return Governor(
+        machine=ExitGuardReviewTDD(),
+        state_dir=tmp_state_dir,
+        audit_dir=tmp_audit_dir,
+        context_dir=tmp_context_dir,
+        project_hash="testhash",
+        session_id="test-session",
+    )
+
+
+class TestExitGuardPassInTriggerTransition:
+    def test_passing_exit_guard_allows_transition(self, exit_guard_pass_governor):
+        result = exit_guard_pass_governor.trigger_transition("pytest_fail")
+        assert result["action"] == "allow"
+        assert "writing_tests -> fixing_tests" in result["transition"]
+
+    def test_passing_exit_guard_updates_state(self, exit_guard_pass_governor):
+        exit_guard_pass_governor.trigger_transition("pytest_fail")
+        assert exit_guard_pass_governor.machine.current_state_name == "fixing_tests"
+
+
+class TestExitGuardFailInTriggerTransition:
+    def test_failing_exit_guard_blocks_transition(self, exit_guard_fail_governor):
+        result = exit_guard_fail_governor.trigger_transition("pytest_fail")
+        assert result["action"] == "challenge"
+        assert "blocked by gate" in result["message"]
+
+    def test_failing_exit_guard_does_not_change_state(self, exit_guard_fail_governor):
+        exit_guard_fail_governor.trigger_transition("pytest_fail")
+        assert exit_guard_fail_governor.machine.current_state_name == "writing_tests"
+
+    def test_exit_guard_only_runs_for_guarded_state(self, tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+        """Exit guard on writing_tests should NOT fire when leaving fixing_tests."""
+        gov = Governor(
+            machine=ExitGuardFailTDD(),
+            state_dir=tmp_state_dir,
+            audit_dir=tmp_audit_dir,
+            context_dir=tmp_context_dir,
+            project_hash="testhash",
+            session_id="test-session",
+        )
+        # Bypass exit guard by passing it first
+        AlwaysFailGate_orig = AlwaysFailGate.evaluate
+        AlwaysFailGate.evaluate = lambda self, ctx: GateResult(GateVerdict.PASS)
+        gov.trigger_transition("pytest_fail")  # writing_tests -> fixing_tests
+        AlwaysFailGate.evaluate = AlwaysFailGate_orig
+        # Now from fixing_tests, exit guard on writing_tests should NOT fire
+        result = gov.trigger_transition("pytest_pass")
+        assert result["action"] == "allow"
+
+
+class TestExitGuardReviewInTriggerTransition:
+    def test_review_exit_guard_returns_review(self, exit_guard_review_governor):
+        result = exit_guard_review_governor.trigger_transition("pytest_fail")
+        assert result["action"] == "review"
+        assert "review needed" in result["message"]
+
+    def test_review_exit_guard_does_not_change_state(self, exit_guard_review_governor):
+        exit_guard_review_governor.trigger_transition("pytest_fail")
+        assert exit_guard_review_governor.machine.current_state_name == "writing_tests"
+
+    def test_review_exit_guard_escalates_after_max_attempts(self, exit_guard_review_governor):
+        exit_guard_review_governor.trigger_transition("pytest_fail")
+        exit_guard_review_governor.trigger_transition("pytest_fail")
+        result = exit_guard_review_governor.trigger_transition("pytest_fail")
+        assert result["action"] == "allow"
+
+
 class ToggleGate2(Gate):
     """Second toggleable gate for multi-gate tests."""
     name = "toggle2"

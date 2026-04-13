@@ -218,15 +218,27 @@ class TestSessionInstructions:
 
 
 class TestGuards:
-    def test_tdd_has_guards_for_pytest_fail(self):
+    def test_tdd_has_no_guards_for_pytest_fail(self):
         m = TDD()
         guards = m.get_guards("pytest_fail")
-        assert TestQualityGate in guards
+        assert guards == []
 
     def test_tdd_has_gate_softness_for_test_quality(self):
         m = TDD()
         softness = m.get_gate_softness("test_quality")
         assert softness == 0.1
+
+
+class TestExitGuards:
+    def test_tdd_has_exit_guards_for_writing_tests(self):
+        m = TDD()
+        guards = m.get_exit_guards("writing_tests")
+        assert TestQualityGate in guards
+
+    def test_tdd_has_no_exit_guards_for_other_states(self):
+        m = TDD()
+        for state in ["red", "fixing_tests", "green", "linting", "fixing_lint"]:
+            assert m.get_exit_guards(state) == []
 
     def test_lint_gate_in_check_states(self):
         m = TDD()

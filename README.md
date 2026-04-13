@@ -58,7 +58,13 @@ This means the governor can be strict where it matters (e.g., no production code
 
 ### Transition guards (gates)
 
-Gates are transition guards — they run when a transition is about to fire, after preconditions pass but before the transition executes. Each gate inspects the work done during the current state and returns a verdict:
+Gates are transition guards that inspect the work done during the current state and return a verdict. There are three types:
+
+- **`GUARDS`** — keyed by event name; run when a specific transition is about to fire
+- **`EXIT_GUARDS`** — keyed by state name; run before *any* transition out of that state
+- **`CHECK_STATES`** — keyed by state name; run on entry to a state, with pass/fail events that pick the next transition
+
+Each gate returns a verdict:
 
 | Verdict | Behavior |
 |---|---|
@@ -68,15 +74,18 @@ Gates are transition guards — they run when a transition is about to fire, aft
 
 **Built-in gates:**
 
-- **TestQualityGate** — runs on `pytest_fail` in the TDD machine. Uses AST analysis to detect structurally invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
+- **TestQualityGate** — exit guard on `writing_tests` in the TDD machine. Prevents leaving the test-writing phase until tests are structurally valid. Uses AST analysis to detect invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
 - **LintGate** — runs on entry to the `linting` state. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
 - **ReassignmentGate** — runs on entry to the `linting` state alongside LintGate. Uses [beniget](https://github.com/serge-sans-paille/beniget) def-use chain analysis to detect variables or parameters assigned more than once within the same scope. Catches rebinding that structural pattern matching cannot detect.
 
-Machines register gates via `GUARDS`, `GATE_SOFTNESS`, and `CHECK_STATES`:
+Machines register gates via `GUARDS`, `EXIT_GUARDS`, `GATE_SOFTNESS`, and `CHECK_STATES`:
 
 ```python
 GUARDS = {
-    "pytest_fail": [TestQualityGate],
+    "pytest_fail": [SomeGate],        # runs when pytest_fail fires
+}
+EXIT_GUARDS = {
+    "writing_tests": [TestQualityGate],  # must pass before leaving writing_tests
 }
 GATE_SOFTNESS = {
     "test_quality": 0.1,   # Strict — override per project
@@ -168,6 +177,10 @@ class MyWorkflow(GovernedMachine):
     # Optional: auto-advance transient states
     AUTO_TRANSITIONS = {
         "step_b": "some_event",
+    }
+    # Optional: gates that must pass before leaving a state
+    EXIT_GUARDS = {
+        "step_a": [MyGate],
     }
     # Optional: require tools to have been used before a transition
     PRECONDITIONS = {

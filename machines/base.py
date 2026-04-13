@@ -17,6 +17,7 @@ class GovernedMachine(StateMachine):
     PRECONDITIONS: dict[str, list[str]] = {}
     SESSION_INSTRUCTIONS: str = ""
     GUARDS: dict[str, list] = {}
+    EXIT_GUARDS: dict[str, list] = {}    # gates that must pass before leaving a state
     GATE_SOFTNESS: dict[str, float] = {}
     CHECK_STATES: dict[str, dict] = {}   # gate runs on entry, result picks transition
 
@@ -43,6 +44,10 @@ class GovernedMachine(StateMachine):
     def get_guards(self, transition_name: str) -> list:
         """Return gate classes registered for a transition. Defaults to []."""
         return self.GUARDS.get(transition_name, [])
+
+    def get_exit_guards(self, state_name: str) -> list:
+        """Return gate classes that must pass before leaving a state. Defaults to []."""
+        return self.EXIT_GUARDS.get(state_name, [])
 
     def get_gate_softness(self, gate_name: str) -> float:
         """Return the softness override for a gate. Defaults to 0.0 (strict)."""

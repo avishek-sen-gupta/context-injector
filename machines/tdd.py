@@ -70,8 +70,10 @@ class TDD(GovernedMachine):
         "green": "start_linting",
     }
 
-    GUARDS = {
-        "pytest_fail": [TestQualityGate],
+    GUARDS = {}
+
+    EXIT_GUARDS = {
+        "writing_tests": [TestQualityGate],
     }
 
     GATE_SOFTNESS = {
