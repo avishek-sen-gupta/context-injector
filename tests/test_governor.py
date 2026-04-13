@@ -2,15 +2,65 @@ import json
 import os
 
 import pytest
+from statemachine import State
 
 from governor.governor import Governor
-from machines.tdd_cycle import TDDCycle
+from machines.base import GovernedMachine
+
+
+class DeclarationMachine(GovernedMachine):
+    """Minimal declaration-based machine for testing governor infrastructure."""
+
+    red = State(initial=True)
+    green = State()
+    refactor = State()
+    docs_detour = State()
+
+    test_written = red.to(green)
+    test_passes = green.to(refactor)
+    refactor_done = refactor.to(red)
+    test_was_wrong = green.to(red)
+    skip_refactor = green.to(red)
+    need_docs = red.to(docs_detour)
+    docs_done = docs_detour.to(red)
+
+    SOFTNESS = {
+        "test_written": 1.0,
+        "test_passes": 1.0,
+        "refactor_done": 1.0,
+        "test_was_wrong": 0.5,
+        "skip_refactor": 0.4,
+        "need_docs": 0.2,
+        "docs_done": 1.0,
+    }
+
+    CONTEXT = {
+        "red": ["conditional/testing-patterns.md"],
+        "green": ["core/*"],
+        "refactor": ["conditional/refactoring.md"],
+        "docs_detour": ["core/*"],
+    }
+
+    ALLOWED_TOOLS = {
+        "red": ["Edit(test_*)", "Write(test_*)", "Bash(pytest*)"],
+        "green": ["Edit", "Write", "Bash(pytest*)"],
+        "refactor": ["Edit", "Write", "Bash(pytest*)"],
+        "docs_detour": ["Edit(*.md)", "Write(*.md)"],
+    }
+
+    PRECONDITIONS = {
+        "test_written": ["Write(test_*)", "Edit(test_*)"],
+        "test_passes": ["Bash(pytest*)"],
+        "refactor_done": ["Edit(*)", "Write(*)"],
+    }
+
+    SESSION_INSTRUCTIONS = "Declaration-based test machine."
 
 
 @pytest.fixture
 def governor(tmp_state_dir, tmp_audit_dir, tmp_context_dir):
     return Governor(
-        machine=TDDCycle(),
+        machine=DeclarationMachine(),
         state_dir=tmp_state_dir,
         audit_dir=tmp_audit_dir,
         context_dir=tmp_context_dir,
@@ -186,7 +236,7 @@ class TestAuditTrail:
         entries = read_audit_log(audit_file)
         assert len(entries) >= 1
         entry = entries[0]
-        assert entry["machine"] == "TDDCycle"
+        assert entry["machine"] == "DeclarationMachine"
         assert entry["from_state"] == "red"
         assert entry["tool_name"] == "Edit"
 

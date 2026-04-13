@@ -53,7 +53,7 @@ def test_cannot_review_from_planning():
 
 def test_sub_machine_reference():
     sm = FeatureDevelopment()
-    assert sm.SUB_MACHINES.get("implementing") == "machines.tdd_cycle.TDDCycle"
+    assert sm.SUB_MACHINES.get("implementing") == "machines.tdd.TDD"
 
 
 def test_session_instructions_present():

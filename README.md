@@ -148,10 +148,6 @@ The governor detects pytest results through two mechanisms:
 - Blocklist-based tool restrictions
 - LintGate + ReassignmentGate run automatically when tests pass
 
-**TDDCycle** (`machines.tdd_cycle.TDDCycle`) — legacy:
-- States: `red` → `green` → `refactor` (+ `docs_detour`)
-- Declaration-based transitions, allowlist-based tool restrictions
-
 **FeatureDevelopment** (`machines.feature_development.FeatureDevelopment`):
 - States: `planning` → `implementing` → `reviewing` → `committing`
 

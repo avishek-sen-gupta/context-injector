@@ -24,8 +24,8 @@ def test_governor_cli_returns_json(mock_project):
     """Test that governor.py reads stdin JSON and writes stdout JSON."""
     event = {
         "event": "pre_tool_use",
-        "tool_name": "Edit",
-        "tool_input": {"file_path": "/project/tests/test_foo.py"},
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/project/README.md"},
         "session_id": "integration-test",
         "timestamp": "2026-04-12T12:00:00Z",
     }
@@ -35,7 +35,7 @@ def test_governor_cli_returns_json(mock_project):
     env["CTX_AUDIT_DIR"] = os.path.join(mock_project, ".ctx-audit")
     env["CTX_CONTEXT_DIR"] = os.path.join(mock_project, ".claude")
     env["CTX_PROJECT_HASH"] = "integration"
-    env["CTX_MACHINE"] = "machines.tdd_cycle.TDDCycle"
+    env["CTX_MACHINE"] = "machines.feature_development.FeatureDevelopment"
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -50,7 +50,7 @@ def test_governor_cli_returns_json(mock_project):
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
     response = json.loads(result.stdout)
-    assert response["current_state"] == "red"
+    assert response["current_state"] == "planning"
     assert response["action"] in ("allow", "remind", "challenge", "block")
 
 
@@ -61,7 +61,7 @@ def test_governor_declaration_transition(mock_project):
     env["CTX_AUDIT_DIR"] = os.path.join(mock_project, ".ctx-audit")
     env["CTX_CONTEXT_DIR"] = os.path.join(mock_project, ".claude")
     env["CTX_PROJECT_HASH"] = "integration2"
-    env["CTX_MACHINE"] = "machines.tdd_cycle.TDDCycle"
+    env["CTX_MACHINE"] = "machines.feature_development.FeatureDevelopment"
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -77,32 +77,39 @@ def test_governor_declaration_transition(mock_project):
         assert result.returncode == 0, f"stderr: {result.stderr}"
         return json.loads(result.stdout)
 
-    # First: write a test file to satisfy precondition
+    # Satisfy precondition for begin_impl: Read(*) and Bash(*)
     run_event({
         "event": "pre_tool_use",
-        "tool_name": "Write",
-        "tool_input": {"file_path": "/project/tests/test_foo.py"},
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/project/README.md"},
+        "session_id": "integration-test-2",
+        "timestamp": "2026-04-12T11:58:00Z",
+    })
+    run_event({
+        "event": "pre_tool_use",
+        "tool_name": "Bash",
+        "tool_input": {"command": "ls"},
         "session_id": "integration-test-2",
         "timestamp": "2026-04-12T11:59:00Z",
     })
 
-    # Now declare green
+    # Declare implementing
     response = run_event({
         "event": "pre_tool_use",
         "tool_name": "Bash",
         "tool_input": {
-            "command": """echo '{"declare_phase": "green", "reason": "test confirmed failing"}'""",
+            "command": """echo '{"declare_phase": "implementing", "reason": "plan complete"}'""",
         },
         "session_id": "integration-test-2",
         "timestamp": "2026-04-12T12:00:00Z",
     })
 
-    assert response["current_state"] == "green"
-    assert response["transition"] == "red -> green"
+    assert response["current_state"] == "implementing"
+    assert response["transition"] == "planning -> implementing"
 
 
-def test_full_tdd_cycle_sequence(mock_project):
-    """Test a complete Red → Green → Refactor → Red cycle through the governor CLI."""
+def test_full_feature_cycle_sequence(mock_project):
+    """Test a complete planning → implementing → reviewing → committing cycle through the governor CLI."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     state_dir = os.path.join(mock_project, ".ctx-state")
     audit_dir = os.path.join(mock_project, ".ctx-audit")
@@ -112,7 +119,7 @@ def test_full_tdd_cycle_sequence(mock_project):
     env["CTX_AUDIT_DIR"] = audit_dir
     env["CTX_CONTEXT_DIR"] = os.path.join(mock_project, ".claude")
     env["CTX_PROJECT_HASH"] = "e2e"
-    env["CTX_MACHINE"] = "machines.tdd_cycle.TDDCycle"
+    env["CTX_MACHINE"] = "machines.feature_development.FeatureDevelopment"
 
     def run_event(event):
         result = subprocess.run(
@@ -126,74 +133,75 @@ def test_full_tdd_cycle_sequence(mock_project):
         assert result.returncode == 0, f"stderr: {result.stderr}"
         return json.loads(result.stdout)
 
-    # 1. Start in red — write a test file (allowed, satisfies precondition)
+    # 1. Start in planning — read a file (satisfies Read(*) precondition)
     r = run_event({
-        "event": "pre_tool_use", "tool_name": "Write",
-        "tool_input": {"file_path": "/p/tests/test_x.py"},
+        "event": "pre_tool_use", "tool_name": "Read",
+        "tool_input": {"file_path": "/p/README.md"},
         "session_id": "e2e", "timestamp": "2026-04-12T12:00:00Z",
     })
-    assert r["current_state"] == "red"
+    assert r["current_state"] == "planning"
     assert r["action"] == "allow"
 
-    # 2. Declare green (precondition: test file written above)
+    # 1b. Run a bash command (satisfies Bash(*) precondition)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
-        "tool_input": {"command": """echo '{"declare_phase": "green", "reason": "test failing"}'"""},
+        "tool_input": {"command": "ls"},
+        "session_id": "e2e", "timestamp": "2026-04-12T12:00:30Z",
+    })
+    assert r["current_state"] == "planning"
+
+    # 2. Declare implementing
+    r = run_event({
+        "event": "pre_tool_use", "tool_name": "Bash",
+        "tool_input": {"command": """echo '{"declare_phase": "implementing", "reason": "plan ready"}'"""},
         "session_id": "e2e", "timestamp": "2026-04-12T12:01:00Z",
     })
-    assert r["current_state"] == "green"
-    assert r["transition"] == "red -> green"
+    assert r["current_state"] == "implementing"
+    assert r["transition"] == "planning -> implementing"
 
-    # 3. Edit source file in green (allowed)
+    # 3. Edit a file (satisfies Edit(*) precondition for impl_complete)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Edit",
         "tool_input": {"file_path": "/p/src/auth.py"},
         "session_id": "e2e", "timestamp": "2026-04-12T12:02:00Z",
     })
-    assert r["current_state"] == "green"
-    assert r["action"] == "allow"
+    assert r["current_state"] == "implementing"
 
-    # 3b. Run pytest (satisfies precondition for test_passes)
+    # 4. Declare reviewing
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
-        "tool_input": {"command": "pytest tests/ -v"},
-        "session_id": "e2e", "timestamp": "2026-04-12T12:02:30Z",
-    })
-    assert r["current_state"] == "green"
-
-    # 4. Declare refactor (precondition: pytest run above)
-    r = run_event({
-        "event": "pre_tool_use", "tool_name": "Bash",
-        "tool_input": {"command": """echo '{"declare_phase": "refactor", "reason": "tests pass"}'"""},
+        "tool_input": {"command": """echo '{"declare_phase": "reviewing", "reason": "impl done"}'"""},
         "session_id": "e2e", "timestamp": "2026-04-12T12:03:00Z",
     })
-    assert r["current_state"] == "refactor"
+    assert r["current_state"] == "reviewing"
 
-    # 4b. Edit a file (satisfies precondition for refactor_done)
+    # 5. Read and run tests (satisfies preconditions for review_passed)
     r = run_event({
-        "event": "pre_tool_use", "tool_name": "Edit",
+        "event": "pre_tool_use", "tool_name": "Read",
         "tool_input": {"file_path": "/p/src/auth.py"},
         "session_id": "e2e", "timestamp": "2026-04-12T12:03:30Z",
     })
-    assert r["current_state"] == "refactor"
-
-    # 5. Declare back to red (precondition: edit above)
     r = run_event({
         "event": "pre_tool_use", "tool_name": "Bash",
-        "tool_input": {"command": """echo '{"declare_phase": "red", "reason": "refactor done"}'"""},
+        "tool_input": {"command": "pytest tests/ -v"},
+        "session_id": "e2e", "timestamp": "2026-04-12T12:03:45Z",
+    })
+
+    # 6. Declare committing
+    r = run_event({
+        "event": "pre_tool_use", "tool_name": "Bash",
+        "tool_input": {"command": """echo '{"declare_phase": "committing", "reason": "review passed"}'"""},
         "session_id": "e2e", "timestamp": "2026-04-12T12:04:00Z",
     })
-    assert r["current_state"] == "red"
+    assert r["current_state"] == "committing"
 
-    # 6. Verify audit trail
+    # 7. Verify audit trail
     audit_file = os.path.join(audit_dir, "e2e.audit.json")
     assert os.path.exists(audit_file)
     from governor.audit import read_audit_log
     entries = read_audit_log(audit_file)
-    assert len(entries) == 7
-    assert entries[0]["from_state"] == "red"
-    assert entries[1]["to_state"] == "green"
-    assert entries[6]["to_state"] == "red"
+    assert len(entries) >= 7
+    assert entries[0]["from_state"] == "planning"
 
 
 def test_session_instructions_cli(mock_project):

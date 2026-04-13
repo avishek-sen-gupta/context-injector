@@ -6,7 +6,6 @@ import pytest
 from gates.base import Gate, GateContext, GateResult, GateVerdict
 from governor.governor import Governor
 from machines.tdd import TDD
-from machines.tdd_cycle import TDDCycle
 from statemachine import State
 from machines.base import GovernedMachine
 
@@ -170,7 +169,22 @@ class TestGateContextConstruction:
         assert "/project/tests/test_foo.py" in CapturingGate.captured_ctx.recent_files
 
 
-class FailGatedTDDCycle(TDDCycle):
+class FailGatedDeclarationMachine(GovernedMachine):
+    """Declaration-based machine with a failing gate on test_written."""
+    red = State(initial=True)
+    green = State()
+
+    test_written = red.to(green)
+    back_to_red = green.to(red)
+
+    SOFTNESS = {"test_written": 1.0, "back_to_red": 1.0}
+    ALLOWED_TOOLS = {
+        "red": ["Edit(test_*)", "Write(test_*)", "Bash(pytest*)"],
+        "green": ["Edit", "Write"],
+    }
+    PRECONDITIONS = {"test_written": ["Write(test_*)", "Edit(test_*)"]}
+    SESSION_INSTRUCTIONS = "Test machine."
+
     GUARDS = {
         "test_written": [AlwaysFailGate],
     }
@@ -182,7 +196,7 @@ class FailGatedTDDCycle(TDDCycle):
 class TestGateInDeclaration:
     def test_failing_gate_blocks_declaration(self, tmp_state_dir, tmp_audit_dir, tmp_context_dir):
         gov = Governor(
-            machine=FailGatedTDDCycle(),
+            machine=FailGatedDeclarationMachine(),
             state_dir=tmp_state_dir,
             audit_dir=tmp_audit_dir,
             context_dir=tmp_context_dir,

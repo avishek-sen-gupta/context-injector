@@ -68,7 +68,6 @@ echo "Installing machine definitions..."
 mkdir -p "$MACHINES_DIR"
 cp "$PLUGIN_DIR/machines/__init__.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/base.py" "$MACHINES_DIR/"
-cp "$PLUGIN_DIR/machines/tdd_cycle.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/tdd.py" "$MACHINES_DIR/"
 cp "$PLUGIN_DIR/machines/feature_development.py" "$MACHINES_DIR/"
 

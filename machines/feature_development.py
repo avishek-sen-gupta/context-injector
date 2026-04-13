@@ -45,7 +45,7 @@ class FeatureDevelopment(GovernedMachine):
     # Maps state names to dotted-path sub-machine classes.
     # The governor instantiates these when entering the state.
     SUB_MACHINES = {
-        "implementing": "machines.tdd_cycle.TDDCycle",
+        "implementing": "machines.tdd.TDD",
     }
 
     SESSION_INSTRUCTIONS = """\
