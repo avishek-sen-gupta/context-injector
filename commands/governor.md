@@ -1,6 +1,6 @@
 Switch the governor's active state machine. Usage: `/governor <machine>` where `<machine>` is one of:
 
-- `tdd` — TDD Cycle (Red/Green/Refactor) — the default
+- `tdd` — Pytest-driven TDD (WritingTests/Red/FixingTests/Green) — the default
 - `feature` — Feature Development (Plan/Implement/Review/Commit)
 - A fully qualified dotted path like `machines.my_workflow.MyWorkflow`
 
@@ -16,7 +16,7 @@ ARG="$ARGUMENTS"
 
 # Resolve shorthand names
 case "$ARG" in
-  tdd)     MACHINE="machines.tdd_cycle.TDDCycle" ;;
+  tdd)     MACHINE="machines.tdd.TDD" ;;
   feature) MACHINE="machines.feature_development.FeatureDevelopment" ;;
   *)       MACHINE="$ARG" ;;
 esac

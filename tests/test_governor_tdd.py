@@ -1,4 +1,4 @@
-"""Tests for governor with TDDv2 machine (auto-transitions, pytest-driven)."""
+"""Tests for governor with TDD machine (auto-transitions, pytest-driven)."""
 
 import json
 import os
@@ -6,13 +6,13 @@ import os
 import pytest
 
 from governor.governor import Governor
-from machines.tdd_v2 import TDDv2
+from machines.tdd import TDD
 
 
 @pytest.fixture
 def governor_v2(tmp_state_dir, tmp_audit_dir, tmp_context_dir):
     return Governor(
-        machine=TDDv2(),
+        machine=TDD(),
         state_dir=tmp_state_dir,
         audit_dir=tmp_audit_dir,
         context_dir=tmp_context_dir,

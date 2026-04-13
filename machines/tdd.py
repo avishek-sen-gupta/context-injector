@@ -1,4 +1,4 @@
-"""TDD v2 state machine: WritingTests → RED → FixingTests → GREEN → WritingTests.
+"""TDD state machine: WritingTests → RED → FixingTests → GREEN → WritingTests.
 
 Transitions are driven by pytest results, not voluntary declarations.
 RED and GREEN are transient states that auto-advance.
@@ -9,7 +9,7 @@ from statemachine import State
 from machines.base import GovernedMachine
 
 
-class TDDv2(GovernedMachine):
+class TDD(GovernedMachine):
     """Pytest-driven TDD cycle with automatic transitions."""
 
     writing_tests = State(initial=True)

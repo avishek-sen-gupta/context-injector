@@ -21,7 +21,7 @@ MACHINE_FILE="$STATE_DIR/$PROJECT_HASH.machine"
 if [ -f "$MACHINE_FILE" ]; then
   ACTIVE_MACHINE="$(cat "$MACHINE_FILE")"
 else
-  ACTIVE_MACHINE="machines.tdd_v2.TDDv2"
+  ACTIVE_MACHINE="machines.tdd.TDD"
 fi
 
 # Reset state file for new session (fresh start)

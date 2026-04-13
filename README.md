@@ -168,7 +168,7 @@ When a blocked tool is used, the governor applies a graduated response based on 
 
 ### Built-in machines
 
-**TDDv2** (`machines.tdd_v2.TDDv2`) — the default:
+**TDD** (`machines.tdd.TDD`) — the default:
 - States: `writing_tests` → `red` → `fixing_tests` → `green` → `writing_tests`
 - Pytest-driven transitions with auto-advancing transient states
 - Blocklist-based tool restrictions
@@ -219,7 +219,7 @@ Place it in `machines/` and set `CTX_MACHINE` to its dotted path (e.g., `machine
 
 | Variable | Default | Description |
 |---|---|---|
-| `CTX_MACHINE` | `machines.tdd_v2.TDDv2` | Dotted path to the state machine class |
+| `CTX_MACHINE` | `machines.tdd.TDD` | Dotted path to the state machine class |
 | `CTX_STATE_DIR` | `/tmp/ctx-state` | Directory for persisted state files |
 | `CTX_AUDIT_DIR` | `$PWD/.claude/audit` | Directory for JSONL audit logs |
 | `CTX_CONTEXT_DIR` | `$PWD/.claude` | Base directory for context file resolution |
