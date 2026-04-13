@@ -194,3 +194,53 @@ def test_full_tdd_cycle_sequence(mock_project):
     assert entries[0]["from_state"] == "red"
     assert entries[1]["to_state"] == "green"
     assert entries[6]["to_state"] == "red"
+
+
+def test_session_instructions_cli(mock_project):
+    """Test that 'python3 -m governor session-instructions' outputs machine instructions."""
+    env = os.environ.copy()
+    env["CTX_STATE_DIR"] = os.path.join(mock_project, ".ctx-state")
+    env["CTX_AUDIT_DIR"] = os.path.join(mock_project, ".ctx-audit")
+    env["CTX_CONTEXT_DIR"] = os.path.join(mock_project, ".claude")
+    env["CTX_PROJECT_HASH"] = "instr-test"
+    env["CTX_MACHINE"] = "machines.tdd.TDD"
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "session-instructions"],
+        input='{"session_id":"test"}',
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "TDD Governor" in result.stdout
+    assert "writing_tests" in result.stdout
+
+
+def test_session_instructions_cli_different_machine(mock_project):
+    """Test that session-instructions returns the correct machine's instructions."""
+    env = os.environ.copy()
+    env["CTX_STATE_DIR"] = os.path.join(mock_project, ".ctx-state")
+    env["CTX_AUDIT_DIR"] = os.path.join(mock_project, ".ctx-audit")
+    env["CTX_CONTEXT_DIR"] = os.path.join(mock_project, ".claude")
+    env["CTX_PROJECT_HASH"] = "instr-test2"
+    env["CTX_MACHINE"] = "machines.feature_development.FeatureDevelopment"
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "session-instructions"],
+        input='{"session_id":"test"}',
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "Feature Development" in result.stdout
+    assert "planning" in result.stdout

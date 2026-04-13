@@ -409,7 +409,7 @@ Context is only re-injected when the state actually changes. If the governor eva
 context-injector/
   hooks/
     governor-hook.sh          # PreToolUse hook that calls the governor
-    session-start-v2.sh       # SessionStart hook with state machine init
+    session-start.sh       # SessionStart hook with state machine init
     pre-compact.sh            # PreCompact hook for compaction survival
   governor/
     governor.py               # Default governor implementation

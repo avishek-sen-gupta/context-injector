@@ -1,7 +1,7 @@
 #!/bin/sh
-# install.sh — Context Injector plugin installer.
+# install-governor.sh — State Machine Governor (v2) installer.
 # Run from the root of the project you want to wire (it must have a .claude/ directory).
-# Requires: jq
+# Requires: jq, python3 with python-statemachine>=3.0.0
 
 set -e
 
@@ -26,18 +26,20 @@ if [ ! -d "$PROJECT_DIR/.claude" ]; then
   exit 1
 fi
 
-# --- install global files ---
-echo "Installing hooks..."
+# --- install hooks ---
+echo "Installing governor hooks..."
 mkdir -p ~/.claude/plugins/context-injector/hooks
-for hook in user-prompt-submit.sh governor-hook.sh session-start-v2.sh post-tool-use.sh pre-compact.sh; do
+for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
   cp "$PLUGIN_DIR/hooks/$hook" ~/.claude/plugins/context-injector/hooks/
   chmod +x ~/.claude/plugins/context-injector/hooks/"$hook"
 done
 
-echo "Installing commands..."
-cp "$PLUGIN_DIR/commands/ctx.md" ~/.claude/commands/ctx.md
+# --- install command ---
+echo "Installing /governor command..."
+mkdir -p ~/.claude/commands
 cp "$PLUGIN_DIR/commands/governor.md" ~/.claude/commands/governor.md
 
+# --- install governor ---
 echo "Installing governor..."
 mkdir -p "$GOVERNOR_DIR"
 cp "$PLUGIN_DIR/governor/__init__.py" "$GOVERNOR_DIR/"
@@ -46,6 +48,7 @@ cp "$PLUGIN_DIR/governor/state_io.py" "$GOVERNOR_DIR/"
 cp "$PLUGIN_DIR/governor/audit.py" "$GOVERNOR_DIR/"
 cp "$PLUGIN_DIR/governor/governor.py" "$GOVERNOR_DIR/"
 
+# --- install machines ---
 echo "Installing machine definitions..."
 mkdir -p "$MACHINES_DIR"
 cp "$PLUGIN_DIR/machines/__init__.py" "$MACHINES_DIR/"
@@ -59,23 +62,11 @@ if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"
 fi
 
-# --- wire UserPromptSubmit hook (idempotent) ---
-ALREADY_WIRED=$(jq '[.hooks.UserPromptSubmit[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
-if [ "$ALREADY_WIRED" = "false" ]; then
-  echo "Wiring UserPromptSubmit hook..."
-  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh"}]}'
-  jq --argjson entry "$HOOK_ENTRY" \
-    '.hooks.UserPromptSubmit = ((.hooks.UserPromptSubmit // []) + [$entry])' \
-    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-else
-  echo "UserPromptSubmit hook already wired, skipping."
-fi
-
 # --- wire SessionStart hook (idempotent) ---
-HAS_SESSION=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("session-start-v2"))' "$SETTINGS")
+HAS_SESSION=$(jq '[.hooks.SessionStart[]?.hooks[]?.command // ""] | any(contains("session-start"))' "$SETTINGS")
 if [ "$HAS_SESSION" = "false" ]; then
   echo "Wiring SessionStart hook..."
-  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start-v2.sh"}]}'
+  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
     '.hooks.SessionStart = ((.hooks.SessionStart // []) + [$entry])' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
@@ -108,8 +99,8 @@ else
 fi
 
 # --- wire PreCompact hook (idempotent) ---
-ALREADY_WIRED=$(jq '[.hooks.PreCompact[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
-if [ "$ALREADY_WIRED" = "false" ]; then
+HAS_COMPACT=$(jq '[.hooks.PreCompact[]?.hooks[]?.command // ""] | any(contains("context-injector"))' "$SETTINGS")
+if [ "$HAS_COMPACT" = "false" ]; then
   echo "Wiring PreCompact hook..."
   HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/pre-compact.sh"}]}'
   jq --argjson entry "$HOOK_ENTRY" \
@@ -126,11 +117,11 @@ if [ -f "$GITIGNORE" ]; then
   grep -q '.claude/state/' "$GITIGNORE" || echo '.claude/state/' >> "$GITIGNORE"
 fi
 
-# --- add Bash permissions (idempotent via unique) ---
+# --- add Bash permissions (idempotent) ---
 echo "Adding Bash permissions..."
-jq '.permissions.allow = ((.permissions.allow // []) + ["Bash(mkdir:/tmp/ctx-locks)", "Bash(touch:/tmp/ctx-locks/*)", "Bash(rm:/tmp/ctx-locks/)"] | unique)' \
+jq '.permissions.allow = ((.permissions.allow // []) + ["Bash(mkdir:/tmp/ctx-governor)", "Bash(touch:/tmp/ctx-governor/*)", "Bash(rm:/tmp/ctx-governor/)"] | unique)' \
   "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 
 echo ""
-echo "Done. Context Injector installed for $PROJECT_DIR."
-echo "Use /ctx to toggle context injection on/off."
+echo "Done. State Machine Governor installed for $PROJECT_DIR."
+echo "Use /governor tdd to enable the TDD governor."

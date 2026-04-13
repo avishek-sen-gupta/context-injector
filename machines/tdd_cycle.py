@@ -61,3 +61,35 @@ class TDDCycle(GovernedMachine):
         "test_passes": ["Bash(pytest*)"],
         "refactor_done": ["Edit(*)", "Write(*)"],
     }
+
+    SESSION_INSTRUCTIONS = """\
+## TDD Cycle Governor — Red/Green/Refactor
+
+You are operating under an enforced TDD cycle governor. The governor tracks your
+workflow phase and constrains which tools are available.
+
+### How It Works
+
+Phase transitions are **declaration-based** — you declare transitions via
+`echo '{"declare_phase": "<target>"}'`.
+
+**States:**
+- **red** (start): Write a failing test. Only test files can be created/edited.
+- **green**: Make the test pass. Production code is editable.
+- **refactor**: Clean up. All code is editable.
+- **docs_detour**: Deviation for documentation work.
+
+**Cycle:** red → green → refactor → red
+
+### Rules
+
+1. **Start in red.** Write a failing test using `Write(test_*)` or `Edit(test_*)`.
+2. **Declare green** when your test is written and pytest confirms it fails.
+3. **Write minimal code** to make the test pass.
+4. **Declare refactor** once pytest passes.
+5. **Refactor**, then declare red to start the next cycle.
+
+### Important
+
+- Some transitions have **preconditions** — you must use specific tools before declaring.
+- Low-softness transitions (docs_detour) will be **challenged** — justify the deviation."""

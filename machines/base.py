@@ -15,6 +15,7 @@ class GovernedMachine(StateMachine):
     ALLOWED_TOOLS: dict[str, list[str]] = {}
     BLOCKED_TOOLS: dict[str, list[str]] = {}
     PRECONDITIONS: dict[str, list[str]] = {}
+    SESSION_INSTRUCTIONS: str = ""
 
     def get_softness(self, transition_name: str) -> float:
         """Return the softness value for a transition. Defaults to 1.0."""

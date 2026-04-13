@@ -3,7 +3,7 @@
 # Injects current state context before conversation compaction so invariants
 # survive compression. Exit 0 always.
 
-LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
+LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
 CORE_DIR="$PWD/.claude/core"
 STATE_DIR="/tmp/ctx-state"
 PROJECT_HASH="$(printf '%s' "$PWD" | md5)"

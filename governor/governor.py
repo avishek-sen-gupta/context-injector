@@ -566,7 +566,7 @@ def _build_governor(event: dict) -> "Governor":
     context_dir = os.environ.get("CTX_CONTEXT_DIR", os.path.join(os.getcwd(), ".claude"))
     project_hash = os.environ.get("CTX_PROJECT_HASH", "default")
     session_id = event.get("session_id", "unknown")
-    machine_module = os.environ.get("CTX_MACHINE", "machines.tdd_cycle.TDDCycle")
+    machine_module = os.environ.get("CTX_MACHINE", "machines.tdd.TDD")
 
     # Dynamic machine loading
     module_path, class_name = machine_module.rsplit(".", 1)
@@ -591,7 +591,12 @@ def main():
       - Default (no args): evaluate a PreToolUse event
       - 'trigger <event_name>': fire a named transition (e.g. pytest_fail)
     """
-    if len(sys.argv) >= 3 and sys.argv[1] == "trigger":
+    if len(sys.argv) >= 2 and sys.argv[1] == "session-instructions":
+        event = json.load(sys.stdin)
+        gov = _build_governor(event)
+        print(gov.machine.SESSION_INSTRUCTIONS)
+        return
+    elif len(sys.argv) >= 3 and sys.argv[1] == "trigger":
         event_name = sys.argv[2]
         event = json.load(sys.stdin)
         gov = _build_governor(event)

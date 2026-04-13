@@ -155,3 +155,21 @@ class TestSoftness:
         assert sm.get_softness("pytest_pass") == 1.0
         assert sm.get_softness("start_fixing") == 1.0
         assert sm.get_softness("start_next_test") == 1.0
+
+
+class TestSessionInstructions:
+    def test_has_session_instructions(self):
+        sm = TDD()
+        assert len(sm.SESSION_INSTRUCTIONS) > 0
+
+    def test_instructions_mention_tdd(self):
+        sm = TDD()
+        assert "TDD" in sm.SESSION_INSTRUCTIONS
+
+    def test_instructions_mention_writing_tests(self):
+        sm = TDD()
+        assert "writing_tests" in sm.SESSION_INSTRUCTIONS
+
+    def test_instructions_mention_pytest(self):
+        sm = TDD()
+        assert "pytest" in sm.SESSION_INSTRUCTIONS

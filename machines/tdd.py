@@ -54,3 +54,35 @@ class TDD(GovernedMachine):
         "red": "start_fixing",
         "green": "start_next_test",
     }
+
+    SESSION_INSTRUCTIONS = """\
+## TDD Governor — Enforced Workflow
+
+You are operating under an enforced TDD governor. The governor tracks your workflow
+phase and **blocks** tool calls that don't match the current phase.
+
+### How It Works
+
+Phase transitions are **automatic** — driven by pytest results, not manual declarations.
+
+**States:**
+- **writing_tests** (start): Write failing tests. Only test files can be created/edited.
+- **red**: Transient — auto-advances to fixing_tests after pytest fails.
+- **fixing_tests**: Write production code to make tests pass. All files editable.
+- **green**: Transient — auto-advances to writing_tests after pytest passes.
+
+**Cycle:** writing_tests → (pytest fails) → fixing_tests → (pytest passes) → writing_tests
+
+### Rules
+
+1. **Start by writing a test.** You can only create/edit `test_*` files in writing_tests.
+2. **Run pytest** to see your test fail. This transitions you to fixing_tests.
+3. **Write minimal code** to make the test pass in fixing_tests.
+4. **Run pytest** again. When tests pass, you return to writing_tests.
+5. **Production code is blocked** in writing_tests — the governor will reject Write/Edit on non-test files.
+
+### Important
+
+- The governor **blocks** disallowed tools (not just warns)
+- You do NOT need to declare phase transitions — pytest results drive them automatically
+- If blocked, check which state you're in and follow the TDD cycle"""

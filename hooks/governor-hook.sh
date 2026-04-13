@@ -4,10 +4,10 @@
 # Outputs additionalContext based on governor response.
 # Exit 0 = allow (advisory context), Exit 2 = block tool.
 
-LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
+LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 
-# Mode off — nothing to do
+# Governor off — nothing to do
 [ -f "$LOCK" ] || exit 0
 
 # Governor not installed — fall back silently
@@ -19,7 +19,7 @@ INPUT=$(cat)
 # Bypass governance for ctx lock file operations (so /ctx can toggle on/off)
 COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
 case "$COMMAND" in
-    *ctx-locks*|*ctx-state*) exit 0 ;;
+    *ctx-locks*|*ctx-governor*|*ctx-state*) exit 0 ;;
 esac
 
 # Set environment for governor

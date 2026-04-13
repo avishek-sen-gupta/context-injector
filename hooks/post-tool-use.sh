@@ -4,7 +4,7 @@
 # based on the tool result after Bash(pytest*) commands.
 # Exit 0 always (PostToolUse cannot block).
 
-LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
+LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 
 # Mode off — nothing to do

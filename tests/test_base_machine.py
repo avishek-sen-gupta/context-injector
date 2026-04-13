@@ -102,3 +102,19 @@ def test_get_preconditions_returns_empty_for_unknown():
 def test_get_preconditions_returns_empty_when_not_defined():
     sm = SimpleMachine()
     assert sm.get_preconditions("go") == []
+
+
+def test_session_instructions_defaults_to_empty():
+    sm = SimpleMachine()
+    assert sm.SESSION_INSTRUCTIONS == ""
+
+
+class MachineWithInstructions(GovernedMachine):
+    alpha = State(initial=True)
+    go = alpha.to(alpha)
+    SESSION_INSTRUCTIONS = "Custom instructions here."
+
+
+def test_session_instructions_returns_custom():
+    sm = MachineWithInstructions()
+    assert sm.SESSION_INSTRUCTIONS == "Custom instructions here."

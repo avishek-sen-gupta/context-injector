@@ -70,3 +70,9 @@ def test_allowed_tools_for_red():
     allowed = sm.get_allowed_tools("red")
     assert allowed is not None
     assert "Edit(test_*)" in allowed
+
+
+def test_session_instructions_present():
+    sm = TDDCycle()
+    assert len(sm.SESSION_INSTRUCTIONS) > 0
+    assert "Red/Green/Refactor" in sm.SESSION_INSTRUCTIONS

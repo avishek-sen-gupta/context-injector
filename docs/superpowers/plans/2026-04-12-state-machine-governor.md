@@ -28,7 +28,7 @@ context-injector/
     feature_development.py        # Outer loop: Plan → Implement → Review → Commit
   hooks/
     governor-hook.sh              # NEW — PreToolUse hook calling governor.py
-    session-start-v2.sh           # NEW — SessionStart hook with state machine init
+    session-start.sh           # NEW — SessionStart hook with state machine init
     pre-compact.sh                # NEW — PreCompact hook for compaction survival
     user-prompt-submit.sh         # EXISTING — kept for backward compat (v1 mode)
     session-start.sh              # EXISTING — kept for backward compat (v1 mode)
@@ -1510,14 +1510,14 @@ git commit -m "feat: add governor PreToolUse hook script"
 ### Task 9: SessionStart Hook (v2)
 
 **Files:**
-- Create: `hooks/session-start-v2.sh`
+- Create: `hooks/session-start.sh`
 
 - [ ] **Step 1: Write the session start hook**
 
-Create `hooks/session-start-v2.sh`:
+Create `hooks/session-start.sh`:
 ```bash
 #!/bin/sh
-# session-start-v2.sh — State Machine Governor SessionStart hook.
+# session-start.sh — State Machine Governor SessionStart hook.
 # Initializes state machine, injects initial context and DeclarePhase instructions.
 # Exit 0 always.
 
@@ -1586,12 +1586,12 @@ exit 0
 
 - [ ] **Step 2: Make it executable**
 
-Run: `chmod +x /Users/asgupta/code/context-injector/hooks/session-start-v2.sh`
+Run: `chmod +x /Users/asgupta/code/context-injector/hooks/session-start.sh`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add hooks/session-start-v2.sh
+git add hooks/session-start.sh
 git commit -m "feat: add v2 SessionStart hook with state machine init and DeclarePhase instructions"
 ```
 
@@ -1776,7 +1776,7 @@ Add these sections to install.sh:
 - Copy governor Python files to `~/.claude/plugins/context-injector/governor/`
 - Copy machine definitions to `~/.claude/plugins/context-injector/machines/`
 - Wire `PreCompact` hook for `pre-compact.sh`
-- Replace `SessionStart` hook entry with `session-start-v2.sh`
+- Replace `SessionStart` hook entry with `session-start.sh`
 - Replace `PreToolUse` hook entry with `governor-hook.sh`
 - Add `.claude/audit/` and `.claude/state/` to `.gitignore` if not already present
 - Check for `python3` and `python-statemachine` dependency
@@ -1809,10 +1809,10 @@ cp "$PLUGIN_DIR/machines/feature_development.py" "$MACHINES_DIR/"
 Add the new hooks to the copy block:
 ```bash
 cp "$PLUGIN_DIR/hooks/governor-hook.sh" ~/.claude/plugins/context-injector/hooks/
-cp "$PLUGIN_DIR/hooks/session-start-v2.sh" ~/.claude/plugins/context-injector/hooks/
+cp "$PLUGIN_DIR/hooks/session-start.sh" ~/.claude/plugins/context-injector/hooks/
 cp "$PLUGIN_DIR/hooks/pre-compact.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/governor-hook.sh
-chmod +x ~/.claude/plugins/context-injector/hooks/session-start-v2.sh
+chmod +x ~/.claude/plugins/context-injector/hooks/session-start.sh
 chmod +x ~/.claude/plugins/context-injector/hooks/pre-compact.sh
 ```
 
