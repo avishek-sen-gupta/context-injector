@@ -114,15 +114,6 @@ ACTION=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.
 # Extract message (from governor gate or lint output)
 MESSAGE=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('message','') or '')" 2>/dev/null)
 
-# If gate returned review or challenge, emit the message
-if [ "$ACTION" = "review" ] || [ "$ACTION" = "challenge" ]; then
-    if [ -n "$MESSAGE" ]; then
-        echo ""
-        echo "$MESSAGE"
-        echo ""
-    fi
-fi
-
 # Extract state and context
 STATE=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('current_state',''))" 2>/dev/null)
 TRANSITION=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('transition','') or '')" 2>/dev/null)
@@ -135,60 +126,85 @@ for f in r.get('context_to_inject', []):
     print(f)
 " 2>/dev/null)
 
-# Output transition info as additional context
-echo "[governor: $EVENT → state=$STATE]"
+# --- Build additionalContext string ---
+# PostToolUse stdout is NOT visible to Claude. We must use the
+# additionalContext JSON mechanism to inject text into the conversation.
+
+CTX=""
+
+# Gate review/challenge messages
+if [ "$ACTION" = "review" ] || [ "$ACTION" = "challenge" ]; then
+    if [ -n "$MESSAGE" ]; then
+        CTX="${CTX}${MESSAGE}\n\n"
+    fi
+fi
+
+# Transition info
+CTX="${CTX}[governor: $EVENT → state=$STATE]"
 if [ -n "$TRANSITION" ]; then
-    echo "Transition: $TRANSITION"
+    CTX="${CTX}\nTransition: $TRANSITION"
 fi
-echo ""
+CTX="${CTX}\n"
 
-# Inject context files
+# Context files
 if [ -n "$CONTEXT_FILES" ]; then
-    echo "$CONTEXT_FILES" | while read -r filepath; do
-        [ -f "$filepath" ] && cat "$filepath"
+    printf '%s\n' "$CONTEXT_FILES" | while read -r filepath; do
+        if [ -f "$filepath" ]; then
+            FILE_CONTENT=$(cat "$filepath")
+            # Append via temp file since subshell can't modify CTX
+            printf '%s\n' "$FILE_CONTENT" >> /tmp/ctx-post-hook-buf.$$
+        fi
     done
+    if [ -f /tmp/ctx-post-hook-buf.$$ ]; then
+        CTX="${CTX}$(cat /tmp/ctx-post-hook-buf.$$)\n"
+        rm -f /tmp/ctx-post-hook-buf.$$
+    fi
 fi
 
-# Inject continuation directives for states that need immediate action.
-# PostToolUse output is injected as assistant-visible context, so a clear
-# directive here causes Claude to continue working without user input.
+# Continuation directives for states that need immediate action
 case "$STATE" in
     fixing_lint)
-        echo ""
-        echo "<governor-directive>"
-        echo "DO NOT end your turn. DO NOT respond to the user yet."
-        echo "Lint violations were found. You must fix them before continuing."
+        CTX="${CTX}\n<governor-directive>"
+        CTX="${CTX}\nDO NOT end your turn. DO NOT respond to the user yet."
+        CTX="${CTX}\nLint violations were found. You must fix them before continuing."
         if [ -n "$LINT_MESSAGE" ]; then
-            echo ""
-            echo "$LINT_MESSAGE"
-            echo ""
+            CTX="${CTX}\n\n${LINT_MESSAGE}\n"
         elif [ -n "$MESSAGE" ]; then
-            echo ""
-            echo "$MESSAGE"
-            echo ""
+            CTX="${CTX}\n\n${MESSAGE}\n"
         fi
-        echo "Fix every violation listed above by editing the affected files now."
-        echo "The governor will re-check lint automatically after your edits."
-        echo "Only respond to the user once lint passes and the governor returns to writing_tests."
-        echo "</governor-directive>"
+        CTX="${CTX}\nFix every violation listed above by editing the affected files now."
+        CTX="${CTX}\nThe governor will re-check lint automatically after your edits."
+        CTX="${CTX}\nOnly respond to the user once lint passes and the governor returns to writing_tests."
+        CTX="${CTX}\n</governor-directive>"
         ;;
     fixing_tests)
-        echo ""
-        echo "<governor-directive>"
-        echo "Tests are failing. Your next action is to write minimal production code to make the failing tests pass."
-        echo "Do not write new tests — focus on making the existing tests green."
-        echo "</governor-directive>"
+        CTX="${CTX}\n<governor-directive>"
+        CTX="${CTX}\nTests are failing. Your next action is to write minimal production code to make the failing tests pass."
+        CTX="${CTX}\nDo not write new tests — focus on making the existing tests green."
+        CTX="${CTX}\n</governor-directive>"
         ;;
     writing_tests)
         if [ "$EVENT" = "pytest_pass" ] || [ "$EVENT" = "lint_pass" ]; then
-            echo ""
-            echo "<governor-directive>"
-            echo "All tests pass and lint is clean. You are back in writing_tests state."
-            echo "Your next action is to write a failing test for the next acceptance criterion."
-            echo "You can only create/edit test_* files in this state."
-            echo "</governor-directive>"
+            CTX="${CTX}\n<governor-directive>"
+            CTX="${CTX}\nAll tests pass and lint is clean. You are back in writing_tests state."
+            CTX="${CTX}\nYour next action is to write a failing test for the next acceptance criterion."
+            CTX="${CTX}\nYou can only create/edit test_* files in this state."
+            CTX="${CTX}\n</governor-directive>"
         fi
         ;;
 esac
+
+# Emit as additionalContext JSON so Claude sees it
+# Use printf '%b' to expand \n sequences into real newlines
+printf '%b' "$CTX" | python3 -c "
+import sys, json
+text = sys.stdin.read()
+print(json.dumps({
+    'hookSpecificOutput': {
+        'hookEventName': 'PostToolUse',
+        'additionalContext': text
+    }
+}))
+"
 
 exit 0
