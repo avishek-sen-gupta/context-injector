@@ -69,6 +69,47 @@ needs_sg = pytest.mark.skipif(
 )
 
 
+class TestResolveRulesDir:
+    """Tests for rules directory resolution logic."""
+
+    def test_explicit_rules_dir_takes_priority(self, tmp_path):
+        gate = LintGate(rules_dir="/explicit/path")
+        assert gate._resolve_rules_dir(str(tmp_path)) == "/explicit/path"
+
+    def test_project_local_rules_found(self, tmp_path):
+        lint_dir = tmp_path / "scripts" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        gate = LintGate()
+        assert gate._resolve_rules_dir(str(tmp_path)) == str(lint_dir)
+
+    def test_falls_back_to_plugin_dir(self, tmp_path, monkeypatch):
+        """When project has no scripts/lint/, falls back to plugin directory."""
+        plugin_lint = tmp_path / "plugin" / "scripts" / "lint"
+        plugin_lint.mkdir(parents=True)
+        (plugin_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        # Patch expanduser so ~ resolves to our fake plugin parent
+        fake_home = tmp_path / "plugin"
+        fake_home.mkdir(exist_ok=True)
+        # Build the expected path: ~/.claude/plugins/context-injector/scripts/lint
+        claude_lint = fake_home / ".claude" / "plugins" / "context-injector" / "scripts" / "lint"
+        claude_lint.mkdir(parents=True)
+        (claude_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        monkeypatch.setattr(os.path, "expanduser", lambda p: str(fake_home) if p == "~" else p)
+        gate = LintGate()
+        # project_root has no scripts/lint, so should fall back to plugin dir
+        empty_project = tmp_path / "empty_project"
+        empty_project.mkdir()
+        result = gate._resolve_rules_dir(str(empty_project))
+        assert result == str(claude_lint)
+
+    def test_returns_none_when_no_rules_found(self, tmp_path, monkeypatch):
+        """When neither project nor plugin has rules, returns None."""
+        monkeypatch.setattr(os.path, "expanduser", lambda p: str(tmp_path / "nonexistent") if p == "~" else p)
+        gate = LintGate()
+        assert gate._resolve_rules_dir(str(tmp_path)) is None
+
+
 class TestLintGateWithoutSg:
     """Tests that work without ast-grep installed."""
 

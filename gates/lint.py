@@ -63,12 +63,20 @@ class LintGate(Gate):
         return shutil.which("sg") or shutil.which("ast-grep")
 
     def _resolve_rules_dir(self, project_root: str) -> str | None:
-        """Find the lint rules directory."""
+        """Find the lint rules directory.
+
+        Searches in order: explicit rules_dir, project-local scripts/lint/,
+        then the plugin install directory (~/.claude/plugins/context-injector/scripts/lint/).
+        """
         if self.rules_dir:
             return self.rules_dir
-        candidate = os.path.join(project_root, "scripts", "lint")
-        if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "sgconfig.yml")):
-            return candidate
+        candidates = [
+            os.path.join(project_root, "scripts", "lint"),
+            os.path.join(os.path.expanduser("~"), ".claude", "plugins", "context-injector", "scripts", "lint"),
+        ]
+        for candidate in candidates:
+            if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "sgconfig.yml")):
+                return candidate
         return None
 
     @staticmethod
