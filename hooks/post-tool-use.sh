@@ -4,7 +4,10 @@
 # based on the tool result after Bash(pytest*) commands.
 # Exit 0 always (PostToolUse cannot block).
 
-LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$HOOK_DIR/lib/hash.sh"
+
+LOCK="/tmp/ctx-governor/$(project_hash "$PWD")"
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 
 # Mode off — nothing to do
@@ -68,7 +71,7 @@ fi
 export CTX_STATE_DIR="/tmp/ctx-state"
 export CTX_AUDIT_DIR="$PWD/.claude/audit"
 export CTX_CONTEXT_DIR="$PWD/.claude"
-export CTX_PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+export CTX_PROJECT_HASH="$(project_hash "$PWD")"
 
 # Read machine config
 MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"

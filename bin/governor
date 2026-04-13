@@ -9,8 +9,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/../hooks/lib/hash.sh"
+
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
-PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+PROJECT_HASH="$(project_hash "$PWD")"
 STATE_DIR="/tmp/ctx-state"
 GOVERNOR_DIR="/tmp/ctx-governor"
 mkdir -p "$STATE_DIR" "$GOVERNOR_DIR"

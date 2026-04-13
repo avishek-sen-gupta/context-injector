@@ -5,7 +5,10 @@
 # Lockfile lives in /tmp/ctx-locks/<md5-of-project-path> — no project pollution.
 # Exit 0 always — missing dirs or no matches are silent no-ops.
 
-LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$HOOK_DIR/lib/hash.sh"
+
+LOCK="/tmp/ctx-locks/$(project_hash "$PWD")"
 CORE_DIR="$PWD/.claude/core"
 COND_DIR="$PWD/.claude/conditional"
 

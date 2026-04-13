@@ -22,7 +22,8 @@ fi
 
 # --- install hook ---
 echo "Installing v1 hook..."
-mkdir -p ~/.claude/plugins/context-injector/hooks
+mkdir -p ~/.claude/plugins/context-injector/hooks/lib
+cp "$PLUGIN_DIR/hooks/lib/hash.sh" ~/.claude/plugins/context-injector/hooks/lib/
 cp "$PLUGIN_DIR/hooks/user-prompt-submit.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
 

@@ -5,6 +5,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/hooks/lib/hash.sh"
+
 PROJECT_DIR="$PWD"
 SETTINGS="$PROJECT_DIR/.claude/settings.json"
 
@@ -37,7 +40,7 @@ else
 fi
 
 # --- remove governor lock file ---
-GOV_LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
+GOV_LOCK="/tmp/ctx-governor/$(project_hash "$PWD")"
 rm -f "$GOV_LOCK" && echo "Removed governor lock file."
 
 # --- remove governor hook files ---
@@ -73,7 +76,7 @@ fi
 
 # --- remove state files ---
 echo "Removing state files..."
-PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+PROJECT_HASH="$(project_hash "$PWD")"
 rm -f "/tmp/ctx-state/$PROJECT_HASH.json"
 rm -f "/tmp/ctx-state/$PROJECT_HASH.machine"
 rm -f "/tmp/ctx-state/$PROJECT_HASH.last_pytest_line"

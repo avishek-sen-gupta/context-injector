@@ -4,7 +4,10 @@
 # Outputs additionalContext based on governor response.
 # Exit 0 = allow (advisory context), Exit 2 = block tool.
 
-LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$HOOK_DIR/lib/hash.sh"
+
+LOCK="/tmp/ctx-governor/$(project_hash "$PWD")"
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 
 # Governor off — nothing to do
@@ -26,7 +29,7 @@ esac
 export CTX_STATE_DIR="/tmp/ctx-state"
 export CTX_AUDIT_DIR="$PWD/.claude/audit"
 export CTX_CONTEXT_DIR="$PWD/.claude"
-export CTX_PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+export CTX_PROJECT_HASH="$(project_hash "$PWD")"
 
 # Read machine config: file > env > default
 MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"

@@ -40,10 +40,7 @@ Both modes use separate lock files and can be enabled independently.
 
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
 - `jq` (for the automated installers)
-- `md5` (macOS built-in; on Linux use `md5sum` — see note below)
 - Python 3 with `python-statemachine>=3.0.0` (governor only)
-
-> **Linux note:** The hooks and commands use `md5` (macOS). On Linux, replace `md5` with `md5sum | cut -d' ' -f1` in the relevant hook and command files.
 
 ## Installation
 

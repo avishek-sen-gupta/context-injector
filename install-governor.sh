@@ -28,7 +28,8 @@ fi
 
 # --- install hooks ---
 echo "Installing governor hooks..."
-mkdir -p ~/.claude/plugins/context-injector/hooks
+mkdir -p ~/.claude/plugins/context-injector/hooks/lib
+cp "$PLUGIN_DIR/hooks/lib/hash.sh" ~/.claude/plugins/context-injector/hooks/lib/
 for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
   cp "$PLUGIN_DIR/hooks/$hook" ~/.claude/plugins/context-injector/hooks/
   chmod +x ~/.claude/plugins/context-injector/hooks/"$hook"

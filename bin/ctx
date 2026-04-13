@@ -8,9 +8,12 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/../hooks/lib/hash.sh"
+
 CTX_DIR="/tmp/ctx-locks"
 mkdir -p "$CTX_DIR"
-LOCK="$CTX_DIR/$(printf '%s' "$PWD" | md5)"
+LOCK="$CTX_DIR/$(project_hash "$PWD")"
 ARG="${1:-}"
 
 case "$ARG" in

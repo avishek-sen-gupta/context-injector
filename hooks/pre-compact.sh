@@ -4,10 +4,13 @@
 # before conversation compaction so invariants survive compression.
 # Exit 0 always.
 
-LOCK="/tmp/ctx-governor/$(printf '%s' "$PWD" | md5)"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$HOOK_DIR/lib/hash.sh"
+
+LOCK="/tmp/ctx-governor/$(project_hash "$PWD")"
 CORE_DIR="$PWD/.claude/core"
 STATE_DIR="/tmp/ctx-state"
-PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+PROJECT_HASH="$(project_hash "$PWD")"
 STATE_FILE="$STATE_DIR/$PROJECT_HASH.json"
 PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 

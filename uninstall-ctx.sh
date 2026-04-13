@@ -5,6 +5,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/hooks/lib/hash.sh"
+
 PROJECT_DIR="$PWD"
 SETTINGS="$PROJECT_DIR/.claude/settings.json"
 
@@ -32,7 +35,7 @@ else
 fi
 
 # --- remove lock file ---
-LOCK="/tmp/ctx-locks/$(printf '%s' "$PWD" | md5)"
+LOCK="/tmp/ctx-locks/$(project_hash "$PWD")"
 rm -f "$LOCK" && echo "Removed ctx lock file."
 
 # --- remove v1 hook file ---
