@@ -135,14 +135,16 @@ case "$STATE" in
     fixing_lint)
         echo ""
         echo "<governor-directive>"
-        echo "IMPORTANT: Lint violations were found in files you modified."
+        echo "DO NOT end your turn. DO NOT respond to the user yet."
+        echo "Lint violations were found. You must fix them before continuing."
         if [ -n "$MESSAGE" ]; then
             echo ""
             echo "$MESSAGE"
             echo ""
         fi
-        echo "Your next action is to fix these lint violations now."
-        echo "Edit the files listed above to resolve each violation, then the governor will re-check automatically."
+        echo "Fix every violation listed above by editing the affected files now."
+        echo "The governor will re-check lint automatically after your edits."
+        echo "Only respond to the user once lint passes and the governor returns to writing_tests."
         echo "</governor-directive>"
         ;;
     fixing_tests)
