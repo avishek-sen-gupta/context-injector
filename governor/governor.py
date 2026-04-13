@@ -53,6 +53,7 @@ class Governor:
             self._restore_machine_state(saved_state)
         self._last_injected_state = persisted.get("last_injected_state")
         self._recent_tools: list[str] = persisted.get("recent_tools", [])
+        self._gate_attempts: dict = persisted.get("gate_attempts", {})
 
     def _restore_machine_state(self, target_state: str) -> None:
         """Attempt to restore machine to a previously persisted state.
@@ -553,6 +554,7 @@ class Governor:
             "last_injection_timestamp": timestamp,
             "session_id": self.session_id,
             "recent_tools": self._recent_tools,
+            "gate_attempts": self._gate_attempts,
         }
         save_state(self._state_file, state)
 

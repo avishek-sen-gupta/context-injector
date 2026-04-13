@@ -20,6 +20,7 @@ def default_state(session_id: str = "") -> dict:
         "last_injected_state": None,
         "last_injection_timestamp": None,
         "session_id": session_id,
+        "gate_attempts": {},
     }
 
 

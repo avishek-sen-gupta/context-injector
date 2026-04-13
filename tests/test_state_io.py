@@ -50,3 +50,9 @@ def test_save_overwrites_existing(tmp_state_dir):
     save_state(state_file, default_state(session_id="s2"))
     loaded = load_state(state_file)
     assert loaded["session_id"] == "s2"
+
+
+def test_default_state_includes_gate_attempts():
+    state = default_state(session_id="test")
+    assert "gate_attempts" in state
+    assert state["gate_attempts"] == {}
