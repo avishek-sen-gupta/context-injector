@@ -121,4 +121,5 @@ Phase transitions are **automatic** — driven by pytest results and lint checks
 
 - The governor **blocks** disallowed tools (not just warns)
 - Transitions are automatic — pytest results and lint checks drive them
+- **Do NOT run ast-grep, lint, or any lint-checking commands manually.** The governor runs lint automatically when tests pass. You will be told the results.
 - Lint violations must be fixed before starting the next test cycle"""
