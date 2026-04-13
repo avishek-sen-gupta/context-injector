@@ -5,6 +5,7 @@ import pytest
 from gates.base import Gate, GateContext, GateResult, GateVerdict
 from governor.governor import Governor
 from machines.tdd import TDD
+from machines.tdd_cycle import TDDCycle
 from statemachine import State
 from machines.base import GovernedMachine
 
@@ -166,3 +167,45 @@ class TestGateContextConstruction:
         gov.trigger_transition("pytest_fail")
         assert CapturingGate.captured_ctx is not None
         assert "/project/tests/test_foo.py" in CapturingGate.captured_ctx.recent_files
+
+
+class FailGatedTDDCycle(TDDCycle):
+    GUARDS = {
+        "test_written": [AlwaysFailGate],
+    }
+    GATE_SOFTNESS = {
+        "always_fail": 0.1,
+    }
+
+
+class TestGateInDeclaration:
+    def test_failing_gate_blocks_declaration(self, tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+        gov = Governor(
+            machine=FailGatedTDDCycle(),
+            state_dir=tmp_state_dir,
+            audit_dir=tmp_audit_dir,
+            context_dir=tmp_context_dir,
+            project_hash="testhash",
+            session_id="test-session",
+        )
+        # Satisfy precondition
+        gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/project/tests/test_foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T11:59:00Z",
+        })
+        # Declare transition — gate should block
+        result = gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": """echo '{"declare_phase": "green", "reason": "test failing"}'""",
+            },
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+        })
+        assert result["action"] == "challenge"
+        assert "blocked by gate" in result["message"]
+        assert result["current_state"] == "red"

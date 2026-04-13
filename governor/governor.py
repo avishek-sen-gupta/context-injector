@@ -405,6 +405,18 @@ class Governor:
                     )
 
                 softness = self.machine.get_softness(transition_name)
+
+                # Run gates before firing
+                gate_response = self._evaluate_gates(transition_name,
+                    datetime.now(timezone.utc).isoformat())
+                if gate_response is not None:
+                    return (
+                        transition_name,
+                        softness,
+                        gate_response["action"],
+                        gate_response["message"],
+                    )
+
                 action, message = self._graduated_response(softness, transition_name, target_phase)
 
                 # Execute the transition if allowed, reset recent tools
