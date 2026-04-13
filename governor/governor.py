@@ -786,6 +786,52 @@ def _print_context():
                 print(full_path)
 
 
+def _print_audit():
+    """Query and print audit entries as JSON."""
+    import argparse
+    import glob as globmod
+
+    audit_dir = os.environ.get("CTX_AUDIT_DIR", os.path.join(os.getcwd(), ".claude", "audit"))
+
+    parser = argparse.ArgumentParser(prog="governor audit")
+    parser.add_argument("--all", action="store_true", help="Show all entries")
+    parser.add_argument("--type", help="Filter by entry type (transition, gate_eval, tool_eval)")
+    parser.add_argument("--gate", help="Filter by gate name")
+    parser.add_argument("--verdict", help="Filter by verdict (pass, fail, review)")
+    parser.add_argument("--session", help="Filter by session ID (use 'current' for latest)")
+    parser.add_argument("--since", help="ISO timestamp or relative (e.g. 7d)")
+    parser.add_argument("--limit", type=int, default=50, help="Max entries to return")
+    args = parser.parse_args(sys.argv[2:])
+
+    from governor.audit import AuditStore
+
+    # Find all audit files
+    all_entries = []
+    pattern = os.path.join(audit_dir, "*.audit.json")
+    for db_path in globmod.glob(pattern):
+        store = AuditStore(db_path)
+        all_entries.extend(store.query())
+
+    # Apply filters
+    if args.type:
+        all_entries = [e for e in all_entries if e.get("type") == args.type]
+    if args.gate:
+        all_entries = [e for e in all_entries if e.get("gate") == args.gate]
+    if args.verdict:
+        all_entries = [e for e in all_entries if e.get("verdict") == args.verdict]
+    if args.session:
+        all_entries = [e for e in all_entries if e.get("session_id") == args.session]
+    if args.since:
+        all_entries = [e for e in all_entries if e.get("timestamp", "") >= args.since]
+
+    # Sort by timestamp descending, apply limit
+    all_entries.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    all_entries = all_entries[:args.limit]
+
+    json.dump(all_entries, sys.stdout, indent=2)
+    print()
+
+
 def main():
     """CLI entry point: read JSON from stdin, write response to stdout.
 
@@ -794,8 +840,12 @@ def main():
       - 'trigger <event_name>': fire a named transition (e.g. pytest_fail)
       - 'status': print current governor state
       - 'context': print resolved context file paths for current state
+      - 'audit': query and print audit entries as JSON
     """
-    if len(sys.argv) >= 2 and sys.argv[1] == "status":
+    if len(sys.argv) >= 2 and sys.argv[1] == "audit":
+        _print_audit()
+        return
+    elif len(sys.argv) >= 2 and sys.argv[1] == "status":
         _print_status()
         return
     elif len(sys.argv) >= 2 and sys.argv[1] == "context":

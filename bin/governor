@@ -21,6 +21,11 @@ LOCK="$GOVERNOR_DIR/$PROJECT_HASH"
 ARG="${1:-status}"
 
 case "$ARG" in
+  audit)
+    shift  # remove 'audit'
+    CTX_AUDIT_DIR="${CTX_AUDIT_DIR:-$PWD/.claude/audit}" \
+      PYTHONPATH="$PLUGIN_DIR" python3 -m governor audit "$@"
+    ;;
   status)
     CTX_STATE_DIR="$STATE_DIR" CTX_PROJECT_HASH="$PROJECT_HASH" CTX_GOVERNOR_DIR="$GOVERNOR_DIR" \
       PYTHONPATH="$PLUGIN_DIR" python3 -m governor status
