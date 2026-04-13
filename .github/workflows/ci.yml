@@ -17,7 +17,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install python-statemachine>=3.0.0 pytest>=8.0
+        run: pip install python-statemachine>=3.0.0 pytest>=8.0 tinydb>=4.0.0
 
       - name: Run tests
         run: python -m pytest tests/ -v
