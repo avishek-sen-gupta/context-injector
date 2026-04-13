@@ -178,6 +178,7 @@ Query the audit trail via `governor audit` — see Transition guards section abo
 | `CTX_AUDIT_DIR` | `$PWD/.claude/audit` | Directory for JSONL audit logs |
 | `CTX_CONTEXT_DIR` | `$PWD/.claude` | Base directory for context file resolution |
 | `CTX_PROJECT_HASH` | md5 of `$PWD` | Unique identifier for the project |
+| `CTX_LINT_RULES_DIR` | `$PLUGIN_DIR/scripts/lint` | Directory containing ast-grep rules and `sgconfig.yml` |
 
 ## Context Injection (lightweight mode)
 

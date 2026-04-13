@@ -83,29 +83,34 @@ class TestResolveRulesDir:
         gate = LintGate()
         assert gate._resolve_rules_dir(str(tmp_path)) == str(lint_dir)
 
-    def test_falls_back_to_plugin_dir(self, tmp_path, monkeypatch):
-        """When project has no scripts/lint/, falls back to plugin directory."""
-        plugin_lint = tmp_path / "plugin" / "scripts" / "lint"
-        plugin_lint.mkdir(parents=True)
-        (plugin_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
-        # Patch expanduser so ~ resolves to our fake plugin parent
-        fake_home = tmp_path / "plugin"
-        fake_home.mkdir(exist_ok=True)
-        # Build the expected path: ~/.claude/plugins/context-injector/scripts/lint
-        claude_lint = fake_home / ".claude" / "plugins" / "context-injector" / "scripts" / "lint"
-        claude_lint.mkdir(parents=True)
-        (claude_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
-        monkeypatch.setattr(os.path, "expanduser", lambda p: str(fake_home) if p == "~" else p)
+    def test_falls_back_to_env_var(self, tmp_path, monkeypatch):
+        """When project has no scripts/lint/, falls back to CTX_LINT_RULES_DIR."""
+        env_lint = tmp_path / "installed" / "scripts" / "lint"
+        env_lint.mkdir(parents=True)
+        (env_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        monkeypatch.setenv("CTX_LINT_RULES_DIR", str(env_lint))
         gate = LintGate()
-        # project_root has no scripts/lint, so should fall back to plugin dir
         empty_project = tmp_path / "empty_project"
         empty_project.mkdir()
         result = gate._resolve_rules_dir(str(empty_project))
-        assert result == str(claude_lint)
+        assert result == str(env_lint)
+
+    def test_project_local_takes_priority_over_env(self, tmp_path, monkeypatch):
+        """Project-local scripts/lint/ wins over CTX_LINT_RULES_DIR."""
+        project_lint = tmp_path / "scripts" / "lint"
+        project_lint.mkdir(parents=True)
+        (project_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        env_lint = tmp_path / "installed" / "scripts" / "lint"
+        env_lint.mkdir(parents=True)
+        (env_lint / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+        monkeypatch.setenv("CTX_LINT_RULES_DIR", str(env_lint))
+        gate = LintGate()
+        result = gate._resolve_rules_dir(str(tmp_path))
+        assert result == str(project_lint)
 
     def test_returns_none_when_no_rules_found(self, tmp_path, monkeypatch):
-        """When neither project nor plugin has rules, returns None."""
-        monkeypatch.setattr(os.path, "expanduser", lambda p: str(tmp_path / "nonexistent") if p == "~" else p)
+        """When neither project nor env has rules, returns None."""
+        monkeypatch.delenv("CTX_LINT_RULES_DIR", raising=False)
         gate = LintGate()
         assert gate._resolve_rules_dir(str(tmp_path)) is None
 

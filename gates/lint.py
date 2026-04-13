@@ -66,14 +66,16 @@ class LintGate(Gate):
         """Find the lint rules directory.
 
         Searches in order: explicit rules_dir, project-local scripts/lint/,
-        then the plugin install directory (~/.claude/plugins/context-injector/scripts/lint/).
+        then CTX_LINT_RULES_DIR (set by the governor hooks at install time).
         """
         if self.rules_dir:
             return self.rules_dir
         candidates = [
             os.path.join(project_root, "scripts", "lint"),
-            os.path.join(os.path.expanduser("~"), ".claude", "plugins", "context-injector", "scripts", "lint"),
         ]
+        env_dir = os.environ.get("CTX_LINT_RULES_DIR")
+        if env_dir:
+            candidates.append(env_dir)
         for candidate in candidates:
             if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "sgconfig.yml")):
                 return candidate
