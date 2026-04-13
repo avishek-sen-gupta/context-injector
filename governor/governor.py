@@ -531,23 +531,9 @@ class Governor:
                     except OSError:
                         pass
 
-                    # Fire the transition and auto-advance
-                    send = getattr(self.machine, event_name, None)
-                    if send:
-                        try:
-                            send()
-                            auto_transitions = getattr(self.machine, "AUTO_TRANSITIONS", {})
-                            mid_state = self.machine.current_state_name
-                            while mid_state in auto_transitions:
-                                auto_event = auto_transitions[mid_state]
-                                auto_send = getattr(self.machine, auto_event)
-                                auto_send()
-                                mid_state = self.machine.current_state_name
-                            self._persist_state(mid_state, timestamp)
-                            self._recent_tools = []
-                        except Exception:
-                            pass
-                return  # Only process the most recent pytest result
+                    # Route through trigger_transition so gates are evaluated
+                    self.trigger_transition(event_name, timestamp)
+                return
 
     def _check_preconditions(self, required_patterns: list[str]) -> bool:
         """Check if any recent tool use matches at least one required pattern."""

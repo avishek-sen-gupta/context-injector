@@ -1,4 +1,5 @@
 # tests/test_governor_gates.py
+import json
 import os
 import pytest
 
@@ -209,3 +210,52 @@ class TestGateInDeclaration:
         assert result["action"] == "challenge"
         assert "blocked by gate" in result["message"]
         assert result["current_state"] == "red"
+
+
+class TestGatesOnTranscriptDetection:
+    def _write_transcript(self, path, command, output, fail=True):
+        """Write a minimal transcript with a pytest result."""
+        tool_use_id = "tu_001"
+        assistant_line = json.dumps({
+            "type": "assistant",
+            "message": {"content": [
+                {"type": "tool_use", "id": tool_use_id, "name": "Bash",
+                 "input": {"command": command}}
+            ]},
+        })
+        result_text = "FAILED" if fail else "passed"
+        user_line = json.dumps({
+            "type": "user",
+            "message": {"content": [
+                {"type": "tool_result", "tool_use_id": tool_use_id,
+                 "content": f"tests/test_foo.py {result_text}"}
+            ]},
+        })
+        with open(path, "w") as f:
+            f.write(assistant_line + "\n")
+            f.write(user_line + "\n")
+
+    def test_transcript_detected_fail_runs_gates(self, tmp_state_dir, tmp_audit_dir, tmp_context_dir):
+        """When transcript scanning detects pytest_fail, gates should run."""
+        gov = Governor(
+            machine=FailGatedTDD(),
+            state_dir=tmp_state_dir,
+            audit_dir=tmp_audit_dir,
+            context_dir=tmp_context_dir,
+            project_hash="testhash",
+            session_id="test-session",
+        )
+        transcript = os.path.join(tmp_state_dir, "transcript.jsonl")
+        self._write_transcript(transcript, "pytest tests/ -v", "FAILED", fail=True)
+
+        # Evaluate with transcript — should detect pytest_fail but gate should block
+        result = gov.evaluate({
+            "event": "pre_tool_use",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/project/foo.py"},
+            "session_id": "test-session",
+            "timestamp": "2026-04-12T12:00:00Z",
+            "transcript_path": transcript,
+        })
+        # State should NOT have changed because gate blocks
+        assert gov.machine.current_state_name == "writing_tests"
