@@ -7,6 +7,7 @@ RED and GREEN are transient states that auto-advance.
 from statemachine import State
 
 from machines.base import GovernedMachine
+from gates.test_quality import TestQualityGate
 
 
 class TDD(GovernedMachine):
@@ -53,6 +54,15 @@ class TDD(GovernedMachine):
     AUTO_TRANSITIONS = {
         "red": "start_fixing",
         "green": "start_next_test",
+    }
+
+    GUARDS = {
+        "pytest_fail": [TestQualityGate],
+        "pytest_pass": [],
+    }
+
+    GATE_SOFTNESS = {
+        "test_quality": 0.1,
     }
 
     SESSION_INSTRUCTIONS = """\

@@ -2,6 +2,7 @@ import pytest
 from statemachine.exceptions import TransitionNotAllowed
 
 from machines.tdd import TDD
+from gates.test_quality import TestQualityGate
 
 
 class TestStates:
@@ -173,3 +174,20 @@ class TestSessionInstructions:
     def test_instructions_mention_pytest(self):
         sm = TDD()
         assert "pytest" in sm.SESSION_INSTRUCTIONS
+
+
+class TestGuards:
+    def test_tdd_has_guards_for_pytest_fail(self):
+        m = TDD()
+        guards = m.get_guards("pytest_fail")
+        assert TestQualityGate in guards
+
+    def test_tdd_has_gate_softness_for_test_quality(self):
+        m = TDD()
+        softness = m.get_gate_softness("test_quality")
+        assert softness == 0.1
+
+    def test_tdd_no_guards_for_pytest_pass(self):
+        m = TDD()
+        guards = m.get_guards("pytest_pass")
+        assert guards == []
