@@ -14,6 +14,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
+from gates.base import Gate, GateContext, GateResult, GateVerdict
 from governor.audit import write_audit_entry
 from governor.state_io import load_state, save_state
 
@@ -171,6 +172,11 @@ class Governor:
                 "context_to_inject": [],
             }
 
+        # Run gates before firing the transition
+        gate_response = self._evaluate_gates(event_name, timestamp)
+        if gate_response is not None:
+            return gate_response
+
         try:
             send()
         except Exception:
@@ -244,6 +250,11 @@ class Governor:
         self._persist_state(final_state, timestamp)
         self._recent_tools = []
 
+        # Reset gate attempts on successful transition
+        guards = self.machine.get_guards(event_name)
+        for gate_cls in guards:
+            self._gate_attempts.pop(gate_cls().name, None)
+
         return {
             "current_state": final_state,
             "transition": f"{from_state} -> {final_state}",
@@ -251,6 +262,105 @@ class Governor:
             "context_to_inject": context_to_inject,
             "message": None,
         }
+
+    def _build_gate_context(self, event_name: str) -> "GateContext":
+        """Build a GateContext from current governor state."""
+        recent_files = []
+        for sig in self._recent_tools:
+            if "(" in sig and not sig.startswith("Bash("):
+                inner = sig.split("(", 1)[1].rstrip(")")
+                if inner:
+                    recent_files.append(inner)
+        return GateContext(
+            state_name=self.machine.current_state_name,
+            transition_name=event_name,
+            recent_tools=list(self._recent_tools),
+            recent_files=recent_files,
+            machine=self.machine,
+            project_root=os.getcwd(),
+        )
+
+    def _evaluate_gates(self, event_name: str, timestamp: str) -> dict | None:
+        """Run gates for a transition. Returns a response dict if blocked, else None."""
+        guards = self.machine.get_guards(event_name)
+        if not guards:
+            return None
+
+        ctx = self._build_gate_context(event_name)
+        for gate_cls in guards:
+            gate = gate_cls()
+            result = gate.evaluate(ctx)
+
+            # Audit the gate evaluation
+            gate_audit = {
+                "timestamp": timestamp,
+                "session_id": self.session_id,
+                "machine": type(self.machine).__name__,
+                "type": "gate_eval",
+                "from_state": self.machine.current_state_name,
+                "to_state": None,
+                "trigger": event_name,
+                "gate": gate.name,
+                "verdict": result.verdict.value,
+                "issues": result.issues,
+                "attempt": self._gate_attempts.get(gate.name, {}).get("count", 0) + 1,
+            }
+            write_audit_entry(self._audit_file, gate_audit)
+
+            if result.verdict == GateVerdict.FAIL:
+                softness = self.machine.get_gate_softness(gate.name)
+                if softness >= SOFTNESS_ALLOW:
+                    return None  # Soft enough to pass
+                elif softness >= SOFTNESS_REMIND:
+                    return {
+                        "current_state": self.machine.current_state_name,
+                        "transition": None,
+                        "action": "remind",
+                        "message": result.message,
+                        "context_to_inject": [],
+                        "gate_results": {gate.name: {"verdict": "fail", "issues": result.issues}},
+                    }
+                else:
+                    return {
+                        "current_state": self.machine.current_state_name,
+                        "transition": None,
+                        "action": "challenge",
+                        "message": result.message,
+                        "context_to_inject": [],
+                        "gate_results": {gate.name: {"verdict": "fail", "issues": result.issues}},
+                    }
+
+            if result.verdict == GateVerdict.REVIEW:
+                attempts = self._gate_attempts.get(gate.name, {})
+                count = attempts.get("count", 0) + 1
+                self._gate_attempts[gate.name] = {
+                    "count": count,
+                    "last_issues": result.issues,
+                }
+                self._persist_state(self.machine.current_state_name, timestamp)
+
+                if count >= 3:
+                    # Escalation: override to allow after max attempts
+                    self._gate_attempts.pop(gate.name, None)
+                    return None
+
+                msg = result.message
+                if count == 2:
+                    msg = (
+                        f"This is the second time this gate flagged the same issue. "
+                        f"{result.message}"
+                    )
+
+                return {
+                    "current_state": self.machine.current_state_name,
+                    "transition": None,
+                    "action": "review",
+                    "message": msg,
+                    "context_to_inject": [],
+                    "gate_results": {gate.name: {"verdict": "review", "issues": result.issues, "attempt": count}},
+                }
+
+        return None  # All gates passed
 
     def _extract_declaration(self, tool_name: str, tool_input: dict) -> dict | None:
         """Extract a DeclarePhase declaration from a Bash echo command."""
