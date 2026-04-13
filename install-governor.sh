@@ -38,7 +38,7 @@ fi
 echo "Installing governor hooks..."
 mkdir -p ~/.claude/plugins/context-injector/hooks/lib
 cp "$PLUGIN_DIR/hooks/lib/hash.sh" ~/.claude/plugins/context-injector/hooks/lib/
-for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh bd-terminology-guard.sh; do
+for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
   cp "$PLUGIN_DIR/hooks/$hook" ~/.claude/plugins/context-injector/hooks/
   chmod +x ~/.claude/plugins/context-injector/hooks/"$hook"
 done
@@ -122,18 +122,6 @@ if [ "$HAS_PRETOOL" = "false" ]; then
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 else
   echo "PreToolUse hook already wired, skipping."
-fi
-
-# --- wire bd-terminology-guard PreToolUse hook (idempotent) ---
-HAS_BD_GUARD=$(jq '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains("bd-terminology-guard"))' "$SETTINGS")
-if [ "$HAS_BD_GUARD" = "false" ]; then
-  echo "Wiring bd-terminology-guard PreToolUse hook..."
-  HOOK_ENTRY='{"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/bd-terminology-guard.sh"}]}'
-  jq --argjson entry "$HOOK_ENTRY" \
-    '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [$entry])' \
-    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-else
-  echo "bd-terminology-guard hook already wired, skipping."
 fi
 
 # --- wire PostToolUse hook (idempotent) ---

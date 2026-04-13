@@ -2,12 +2,13 @@
 
 A Claude Code plugin that governs agent behavior during development workflows. It enforces discipline — blocking tools that shouldn't be used, advancing state based on real signals (like test results), injecting the right context at the right time, and producing an audit trail of every decision.
 
-Two modes, from lightweight to full enforcement:
+Three modes, from lightweight to full enforcement:
 
 1. **Governor** (`/governor`) — a state machine that enforces workflow phases, blocks disallowed tools, transitions automatically on pytest results, and injects state-specific context
 2. **Context Injection** (`/ctx`) — keyword-based context injection without enforcement, for projects that want guidance without guardrails
+3. **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
 
-Both modes are independent and can run simultaneously.
+All modes are independent and can be installed/enabled simultaneously.
 
 ## Governor
 
@@ -254,16 +255,17 @@ Each project provides its own context files:
     tools-skills.md
 ```
 
-## Using both modes
+## Using all three modes
 
-v1 and v2 use **separate lock files** and can be enabled independently:
+All three modes use **separate lock files / hooks** and can be enabled independently:
 
-| Mode | Command | Lock file |
+| Mode | Command | Hook events |
 |---|---|---|
-| Context Injection | `/ctx on\|off` | `/tmp/ctx-locks/<hash>` |
-| Governor | `/governor tdd\|off\|status` | `/tmp/ctx-governor/<hash>` |
+| Context Injection | `/ctx on\|off` | `UserPromptSubmit` |
+| Governor | `/governor tdd\|off\|status` | `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact` |
+| Beads Terminology Guard | `install-bd-guard.sh` / `uninstall-bd-guard.sh` | `PreToolUse` |
 
-When both are active, context injection adds keyword-matched files via `UserPromptSubmit`, while the governor enforces workflow state via `PreToolUse`, `PostToolUse`, `SessionStart`, and `PreCompact`.
+When multiple modes are active they don't conflict — each operates on its own hook events and lock files.
 
 ## Requirements
 
@@ -305,9 +307,24 @@ Installs:
 
 Uninstall: `/path/to/context-injector/uninstall-ctx.sh`
 
-### Both
+### Beads Terminology Guard
 
-You can install both independently — they use separate lock files and don't conflict.
+```bash
+cd /path/to/your/project
+/path/to/context-injector/install-bd-guard.sh
+```
+
+Installs:
+- `bd-terminology-guard.sh` hook → `~/.claude/plugins/context-injector/hooks/`
+- Wires `PreToolUse` hook in `.claude/settings.json`
+
+Blocklist: `~/.config/git/blocklist.txt` (one term per line)
+
+Uninstall: `/path/to/context-injector/uninstall-bd-guard.sh`
+
+### All three
+
+You can install all three independently — they use separate lock files and hooks and don't conflict.
 
 All scripts are idempotent — safe to run multiple times.
 
@@ -394,6 +411,30 @@ cp commands/ctx.md ~/.claude/commands/ctx.md
 "Bash(mkdir:/tmp/ctx-locks)",
 "Bash(touch:/tmp/ctx-locks/*)",
 "Bash(rm:/tmp/ctx-locks/*)"
+```
+
+#### Beads Terminology Guard
+
+**1. Copy the hook:**
+```bash
+mkdir -p ~/.claude/plugins/context-injector/hooks
+cp hooks/bd-terminology-guard.sh ~/.claude/plugins/context-injector/hooks/
+chmod +x ~/.claude/plugins/context-injector/hooks/bd-terminology-guard.sh
+```
+
+**2. Wire in `.claude/settings.json`:**
+```json
+"hooks": {
+  "PreToolUse": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/bd-terminology-guard.sh"}]}
+  ]
+}
+```
+
+**3. Create blocklist:**
+```bash
+mkdir -p ~/.config/git
+echo "sensitive-term" >> ~/.config/git/blocklist.txt
 ```
 
 ## License
