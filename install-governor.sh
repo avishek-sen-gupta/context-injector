@@ -77,6 +77,13 @@ cp "$PLUGIN_DIR/gates/base.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/test_quality.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/lint.py" "$GATES_DIR/"
 
+# --- install lint rules ---
+echo "Installing lint rules..."
+LINT_DIR="$HOME/.claude/plugins/context-injector/scripts/lint/rules"
+mkdir -p "$LINT_DIR"
+cp "$PLUGIN_DIR/scripts/lint/sgconfig.yml" "$HOME/.claude/plugins/context-injector/scripts/lint/"
+cp "$PLUGIN_DIR/scripts/lint/rules/"*.yml "$LINT_DIR/"
+
 # --- create settings.json if missing ---
 if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"

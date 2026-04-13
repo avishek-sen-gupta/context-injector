@@ -67,6 +67,14 @@ if [ -d ~/.claude/plugins/context-injector/machines ]; then
   rm -rf ~/.claude/plugins/context-injector/machines
   echo "Removed machine definitions."
 fi
+if [ -d ~/.claude/plugins/context-injector/gates ]; then
+  rm -rf ~/.claude/plugins/context-injector/gates
+  echo "Removed gate definitions."
+fi
+if [ -d ~/.claude/plugins/context-injector/scripts ]; then
+  rm -rf ~/.claude/plugins/context-injector/scripts
+  echo "Removed lint rules."
+fi
 
 # --- remove command ---
 if [ -f ~/.claude/commands/governor.md ]; then
