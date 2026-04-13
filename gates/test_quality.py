@@ -120,6 +120,11 @@ class TestQualityGate(Gate):
                     "Trivial assertion (assert True/literal)",
                 ))
 
+        # Soft violations: only flag if no hard issues found and there are assertions
+        if not issues and asserts:
+            soft = self._check_soft_violations(asserts, func, path)
+            issues.extend(soft)
+
         return issues
 
     def _find_assertions(self, func: ast.FunctionDef) -> list[ast.Assert]:
@@ -198,3 +203,113 @@ class TestQualityGate(Gate):
             "Otherwise, strengthen the assertions first."
         )
         return "\n".join(lines)
+
+    def _check_soft_violations(self, asserts: list[ast.Assert], func: ast.FunctionDef, path: str) -> list[Issue]:
+        basename = os.path.basename(path)
+        issues = []
+
+        has_value_comparison = False
+        all_none_checks = True
+        all_membership_checks = True
+        all_type_checks = True
+
+        for a in asserts:
+            kind = self._classify_assertion(a)
+            if kind == "value_comparison":
+                has_value_comparison = True
+                all_none_checks = False
+                all_membership_checks = False
+                all_type_checks = False
+            elif kind == "none_check":
+                all_membership_checks = False
+                all_type_checks = False
+            elif kind == "membership_check":
+                all_none_checks = False
+                all_type_checks = False
+            elif kind == "type_check":
+                all_none_checks = False
+                all_membership_checks = False
+            else:
+                all_none_checks = False
+                all_membership_checks = False
+                all_type_checks = False
+
+        if not has_value_comparison and len(asserts) > 0:
+            if all_none_checks:
+                issues.append(Issue(
+                    "none_only", "soft", basename, func.name, asserts[0].lineno,
+                    "All assertions only check None/not None",
+                ))
+            elif all_membership_checks:
+                issues.append(Issue(
+                    "membership_only", "soft", basename, func.name, asserts[0].lineno,
+                    "All assertions only check membership (in/not in) without verifying values",
+                ))
+            elif all_type_checks:
+                issues.append(Issue(
+                    "type_only", "soft", basename, func.name, asserts[0].lineno,
+                    "All assertions only check types (isinstance) without verifying values",
+                ))
+
+        # Import overlap: same callable on both sides of ==
+        overlap = self._check_import_overlap(asserts, func)
+        if overlap:
+            issues.append(Issue(
+                "import_overlap", "soft", basename, func.name, overlap.lineno,
+                "Same production function called on both sides of assertion",
+            ))
+
+        return issues
+
+    def _classify_assertion(self, node: ast.Assert) -> str:
+        """Classify an assertion into a category."""
+        test = node.test
+
+        # assert x is None / assert x is not None
+        if isinstance(test, ast.Compare):
+            if len(test.ops) == 1:
+                op = test.ops[0]
+                comparator = test.comparators[0]
+                if isinstance(op, (ast.Is, ast.IsNot)) and isinstance(comparator, ast.Constant) and comparator.value is None:
+                    return "none_check"
+                if isinstance(op, (ast.In, ast.NotIn)):
+                    return "membership_check"
+                if isinstance(op, (ast.Eq, ast.NotEq, ast.Lt, ast.Gt, ast.LtE, ast.GtE)):
+                    return "value_comparison"
+
+        # assert isinstance(x, Y)
+        if isinstance(test, ast.Call):
+            if isinstance(test.func, ast.Name) and test.func.id == "isinstance":
+                return "type_check"
+
+        # Anything else with a comparison operator
+        if isinstance(test, ast.Compare):
+            return "value_comparison"
+
+        return "other"
+
+    def _check_import_overlap(self, asserts: list[ast.Assert], func: ast.FunctionDef) -> ast.Assert | None:
+        """Detect if the same function call appears on both sides of an assertion comparison."""
+        for a in asserts:
+            test = a.test
+            if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+                continue
+            if not isinstance(test.ops[0], ast.Eq):
+                continue
+            left = test.left
+            right = test.comparators[0]
+            if isinstance(left, ast.Call) and isinstance(right, ast.Call):
+                left_name = self._call_name(left)
+                right_name = self._call_name(right)
+                if left_name and left_name == right_name:
+                    return a
+        return None
+
+    @staticmethod
+    def _call_name(node: ast.Call) -> str | None:
+        """Extract the callable name from a Call node."""
+        if isinstance(node.func, ast.Name):
+            return node.func.id
+        if isinstance(node.func, ast.Attribute):
+            return node.func.attr
+        return None

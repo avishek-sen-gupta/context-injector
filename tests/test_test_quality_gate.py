@@ -108,3 +108,72 @@ def test_raises():
         ctx = _make_context(str(tmp_path), [path])
         result = TestQualityGate().evaluate(ctx)
         assert result.verdict == GateVerdict.PASS
+
+
+class TestSoftViolations:
+    def test_none_only_checks_trigger_review(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+def test_something():
+    result = get_widget()
+    assert result is not None
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.REVIEW
+        assert any("none_only" in i for i in result.issues)
+
+    def test_membership_only_checks_trigger_review(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+def test_something():
+    result = get_data()
+    assert "key" in result
+    assert "other" in result
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.REVIEW
+        assert any("membership_only" in i for i in result.issues)
+
+    def test_type_only_checks_trigger_review(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+def test_something():
+    result = create_widget()
+    assert isinstance(result, dict)
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.REVIEW
+        assert any("type_only" in i for i in result.issues)
+
+    def test_mixed_assertions_with_value_check_passes(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+def test_something():
+    result = get_data()
+    assert "key" in result
+    assert result["key"] == "expected_value"
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    def test_none_check_plus_value_check_passes(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+def test_something():
+    result = get_widget()
+    assert result is not None
+    assert result.name == "expected"
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    def test_import_overlap_triggers_review(self, tmp_path):
+        path = _make_test_file(tmp_path, "test_foo.py", """\
+from app import compute
+def test_tautology():
+    assert compute(1) == compute(1)
+""")
+        ctx = _make_context(str(tmp_path), [path])
+        result = TestQualityGate().evaluate(ctx)
+        assert result.verdict == GateVerdict.REVIEW
+        assert any("import_overlap" in i for i in result.issues)
