@@ -87,6 +87,21 @@ RESPONSE=$(printf '%s' "$INPUT" | PYTHONPATH="$PLUGIN_DIR" python3 -m governor t
 # If governor failed, exit silently
 [ -z "$RESPONSE" ] && exit 0
 
+# Extract action from governor response
+ACTION=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('action',''))" 2>/dev/null)
+
+# Extract message
+MESSAGE=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('message','') or '')" 2>/dev/null)
+
+# If gate returned review or challenge, emit the message
+if [ "$ACTION" = "review" ] || [ "$ACTION" = "challenge" ]; then
+    if [ -n "$MESSAGE" ]; then
+        echo ""
+        echo "$MESSAGE"
+        echo ""
+    fi
+fi
+
 # Extract state and context
 STATE=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('current_state',''))" 2>/dev/null)
 TRANSITION=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('transition','') or '')" 2>/dev/null)
