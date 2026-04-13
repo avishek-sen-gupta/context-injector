@@ -26,6 +26,12 @@ mkdir -p ~/.claude/plugins/context-injector/hooks
 cp "$PLUGIN_DIR/hooks/user-prompt-submit.sh" ~/.claude/plugins/context-injector/hooks/
 chmod +x ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh
 
+# --- install CLI ---
+echo "Installing ctx CLI..."
+mkdir -p ~/.claude/plugins/context-injector/bin
+cp "$PLUGIN_DIR/bin/ctx" ~/.claude/plugins/context-injector/bin/
+chmod +x ~/.claude/plugins/context-injector/bin/ctx
+
 # --- install command ---
 echo "Installing /ctx command..."
 mkdir -p ~/.claude/commands

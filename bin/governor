@@ -1,0 +1,48 @@
+#!/bin/sh
+# governor — CLI for the State Machine Governor.
+# Usage:
+#   governor tdd       — enable governor with TDD machine
+#   governor feature   — enable governor with Feature Development machine
+#   governor off       — disable the governor
+#   governor status    — show current machine and state (JSON)
+#   governor <dotted>  — enable with a custom machine class
+
+set -e
+
+PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
+PROJECT_HASH="$(printf '%s' "$PWD" | md5)"
+STATE_DIR="/tmp/ctx-state"
+GOVERNOR_DIR="/tmp/ctx-governor"
+mkdir -p "$STATE_DIR" "$GOVERNOR_DIR"
+LOCK="$GOVERNOR_DIR/$PROJECT_HASH"
+ARG="${1:-status}"
+
+case "$ARG" in
+  status)
+    CTX_STATE_DIR="$STATE_DIR" CTX_PROJECT_HASH="$PROJECT_HASH" CTX_GOVERNOR_DIR="$GOVERNOR_DIR" \
+      PYTHONPATH="$PLUGIN_DIR" python3 -m governor status
+    ;;
+  off)
+    rm -f "$LOCK"
+    echo "[governor: off]"
+    ;;
+  *)
+    # Resolve shorthand names
+    case "$ARG" in
+      tdd)     MACHINE="machines.tdd.TDD" ;;
+      feature) MACHINE="machines.feature_development.FeatureDevelopment" ;;
+      *)       MACHINE="$ARG" ;;
+    esac
+
+    # Write machine config
+    printf '%s' "$MACHINE" > "$STATE_DIR/$PROJECT_HASH.machine"
+
+    # Reset state file so the new machine starts fresh
+    rm -f "$STATE_DIR/$PROJECT_HASH.json"
+
+    # Enable governor
+    touch "$LOCK"
+
+    echo "[governor: on — machine=$MACHINE]"
+    ;;
+esac

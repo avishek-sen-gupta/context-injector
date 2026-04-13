@@ -34,6 +34,12 @@ for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; d
   chmod +x ~/.claude/plugins/context-injector/hooks/"$hook"
 done
 
+# --- install CLI ---
+echo "Installing governor CLI..."
+mkdir -p ~/.claude/plugins/context-injector/bin
+cp "$PLUGIN_DIR/bin/governor" ~/.claude/plugins/context-injector/bin/
+chmod +x ~/.claude/plugins/context-injector/bin/governor
+
 # --- install command ---
 echo "Installing /governor command..."
 mkdir -p ~/.claude/commands

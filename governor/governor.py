@@ -584,14 +584,62 @@ def _build_governor(event: dict) -> "Governor":
     )
 
 
+def _print_status():
+    """Print the current governor status as JSON."""
+    import hashlib
+
+    state_dir = os.environ.get("CTX_STATE_DIR", "/tmp/ctx-state")
+    project_hash = os.environ.get(
+        "CTX_PROJECT_HASH",
+        hashlib.md5(os.getcwd().encode()).hexdigest(),
+    )
+    governor_dir = os.environ.get("CTX_GOVERNOR_DIR", "/tmp/ctx-governor")
+    governor_lock = os.path.join(governor_dir, project_hash)
+
+    if not os.path.exists(governor_lock):
+        json.dump({"active": False}, sys.stdout, indent=2)
+        print()
+        return
+
+    machine_file = os.path.join(state_dir, f"{project_hash}.machine")
+    state_file = os.path.join(state_dir, f"{project_hash}.json")
+
+    machine_name = None
+    if os.path.exists(machine_file):
+        machine_name = open(machine_file).read().strip()
+
+    current_state = None
+    session_id = None
+    last_injection = None
+    if os.path.exists(state_file):
+        state = load_state(state_file)
+        current_state = state.get("inner_state")
+        session_id = state.get("session_id")
+        last_injection = state.get("last_injection_timestamp")
+
+    status = {
+        "active": True,
+        "machine": machine_name,
+        "state": current_state,
+        "session_id": session_id,
+        "last_injection": last_injection,
+    }
+    json.dump(status, sys.stdout, indent=2)
+    print()
+
+
 def main():
     """CLI entry point: read JSON from stdin, write response to stdout.
 
     Modes:
       - Default (no args): evaluate a PreToolUse event
       - 'trigger <event_name>': fire a named transition (e.g. pytest_fail)
+      - 'status': print current governor state
     """
-    if len(sys.argv) >= 2 and sys.argv[1] == "session-instructions":
+    if len(sys.argv) >= 2 and sys.argv[1] == "status":
+        _print_status()
+        return
+    elif len(sys.argv) >= 2 and sys.argv[1] == "session-instructions":
         event = json.load(sys.stdin)
         gov = _build_governor(event)
         print(gov.machine.SESSION_INSTRUCTIONS)

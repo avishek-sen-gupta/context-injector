@@ -1,0 +1,45 @@
+#!/bin/sh
+# ctx — CLI for Context Injector v1 (keyword classification).
+# Usage:
+#   ctx on     — enable keyword-based context injection
+#   ctx off    — disable keyword-based context injection
+#   ctx        — toggle (no argument)
+#   ctx status — show current state (JSON)
+
+set -e
+
+CTX_DIR="/tmp/ctx-locks"
+mkdir -p "$CTX_DIR"
+LOCK="$CTX_DIR/$(printf '%s' "$PWD" | md5)"
+ARG="${1:-}"
+
+case "$ARG" in
+  status)
+    if [ -f "$LOCK" ]; then
+      echo '{"active": true}'
+    else
+      echo '{"active": false}'
+    fi
+    ;;
+  on)
+    touch "$LOCK"
+    echo '{"active": true}'
+    ;;
+  off)
+    rm -f "$LOCK"
+    echo '{"active": false}'
+    ;;
+  "")
+    if [ -f "$LOCK" ]; then
+      rm "$LOCK"
+      echo '{"active": false}'
+    else
+      touch "$LOCK"
+      echo '{"active": true}'
+    fi
+    ;;
+  *)
+    echo "Usage: ctx [on|off|status]" >&2
+    exit 1
+    ;;
+esac

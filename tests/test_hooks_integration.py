@@ -244,3 +244,73 @@ def test_session_instructions_cli_different_machine(mock_project):
     assert result.returncode == 0, f"stderr: {result.stderr}"
     assert "Feature Development" in result.stdout
     assert "planning" in result.stdout
+
+
+def test_status_cli_inactive(mock_project):
+    """Test that 'python3 -m governor status' reports inactive when no lock file."""
+    env = os.environ.copy()
+    env["CTX_STATE_DIR"] = os.path.join(mock_project, ".ctx-state")
+    env["CTX_PROJECT_HASH"] = "status-test-inactive"
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "status"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    status = json.loads(result.stdout)
+    assert status["active"] is False
+
+
+def test_status_cli_active(mock_project):
+    """Test that 'python3 -m governor status' reports machine and state when active."""
+    env = os.environ.copy()
+    state_dir = os.path.join(mock_project, ".ctx-state")
+    governor_dir = os.path.join(mock_project, ".ctx-governor")
+    os.makedirs(state_dir, exist_ok=True)
+    os.makedirs(governor_dir, exist_ok=True)
+
+    project_hash = "status-test-active"
+    env["CTX_STATE_DIR"] = state_dir
+    env["CTX_PROJECT_HASH"] = project_hash
+
+    # Create lock file
+    with open(os.path.join(governor_dir, project_hash), "w") as f:
+        pass
+
+    # Create machine file
+    with open(os.path.join(state_dir, f"{project_hash}.machine"), "w") as f:
+        f.write("machines.tdd.TDD")
+
+    # Create state file
+    with open(os.path.join(state_dir, f"{project_hash}.json"), "w") as f:
+        json.dump({
+            "inner_machine": "TDD",
+            "inner_state": "fixing_tests",
+            "session_id": "test-session",
+            "last_injection_timestamp": "2026-04-13T12:00:00Z",
+        }, f)
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    env["CTX_GOVERNOR_DIR"] = governor_dir
+
+    result = subprocess.run(
+        ["python3", "-m", "governor", "status"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=project_root,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    status = json.loads(result.stdout)
+    assert status["active"] is True
+    assert status["machine"] == "machines.tdd.TDD"
+    assert status["state"] == "fixing_tests"
+    assert status["session_id"] == "test-session"

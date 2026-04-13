@@ -49,6 +49,12 @@ for hook in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; d
   fi
 done
 
+# --- remove governor CLI ---
+if [ -d ~/.claude/plugins/context-injector/bin ]; then
+  rm -rf ~/.claude/plugins/context-injector/bin
+  echo "Removed governor CLI."
+fi
+
 # --- remove governor and machine code ---
 if [ -d ~/.claude/plugins/context-injector/governor ]; then
   rm -rf ~/.claude/plugins/context-injector/governor

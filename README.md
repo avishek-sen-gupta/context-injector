@@ -21,6 +21,7 @@ Both modes use separate lock files and can be enabled independently.
 - **`/governor tdd`** — enables the governor with the TDD state machine
 - **`/governor feature`** — enables with the Feature Development machine
 - **`/governor off`** — disables the governor
+- **`/governor status`** — shows current machine and state as JSON
 - State is stored in `/tmp/ctx-governor/<md5-of-project-path>`.
 - When on, core context is injected at **session start** along with machine-specific workflow instructions.
 - The governor evaluates every tool call, blocks disallowed tools per state, and injects state-specific context.
@@ -289,7 +290,7 @@ v1 and v2 use **separate lock files** and can be enabled independently:
 | Mode | Command | Lock file |
 |---|---|---|
 | v1 (keywords) | `/ctx on\|off` | `/tmp/ctx-locks/<hash>` |
-| v2 (governor) | `/governor tdd\|off` | `/tmp/ctx-governor/<hash>` |
+| v2 (governor) | `/governor tdd\|off\|status` | `/tmp/ctx-governor/<hash>` |
 
 Both can be active simultaneously — v1 injects keyword-matched context via `UserPromptSubmit`, while v2 enforces workflow state via `PreToolUse`, `PostToolUse`, `SessionStart`, and `PreCompact`.
 

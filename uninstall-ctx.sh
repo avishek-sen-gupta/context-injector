@@ -41,6 +41,12 @@ if [ -f ~/.claude/plugins/context-injector/hooks/user-prompt-submit.sh ]; then
   echo "Removed user-prompt-submit.sh hook."
 fi
 
+# --- remove ctx CLI ---
+if [ -f ~/.claude/plugins/context-injector/bin/ctx ]; then
+  rm -f ~/.claude/plugins/context-injector/bin/ctx
+  echo "Removed ctx CLI."
+fi
+
 # --- remove command ---
 if [ -f ~/.claude/commands/ctx.md ]; then
   rm -f ~/.claude/commands/ctx.md
