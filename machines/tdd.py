@@ -29,9 +29,9 @@ class TDD(GovernedMachine):
     start_fixing = red.to(fixing_tests)
     start_linting = green.to(linting)
 
-    # Lint transitions (fired by governor CHECK_STATES / RECHECK_STATES)
+    # Lint transitions (fired by governor CHECK_STATES)
     lint_pass = linting.to(writing_tests) | fixing_lint.to(writing_tests)
-    lint_fail = linting.to(fixing_lint)
+    lint_fail = linting.to(fixing_lint) | fixing_lint.to(fixing_lint)
 
     SOFTNESS = {
         "pytest_fail": 1.0,
@@ -80,6 +80,11 @@ class TDD(GovernedMachine):
     # Conditional auto-advance: gate runs on entry, result picks transition
     CHECK_STATES = {
         "linting": {
+            "gate": LintGate,
+            "pass_event": "lint_pass",
+            "fail_event": "lint_fail",
+        },
+        "fixing_lint": {
             "gate": LintGate,
             "pass_event": "lint_pass",
             "fail_event": "lint_fail",
