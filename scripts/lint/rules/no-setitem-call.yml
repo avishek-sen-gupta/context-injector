@@ -1,0 +1,6 @@
+id: no-setitem-call
+language: python
+rule:
+  pattern: $OBJ.__setitem__($KEY, $VAL)
+message: "__setitem__() call — use comprehensions or immutable update patterns"
+severity: warning
