@@ -128,4 +128,40 @@ if [ -n "$CONTEXT_FILES" ]; then
     done
 fi
 
+# Inject continuation directives for states that need immediate action.
+# PostToolUse output is injected as assistant-visible context, so a clear
+# directive here causes Claude to continue working without user input.
+case "$STATE" in
+    fixing_lint)
+        echo ""
+        echo "<governor-directive>"
+        echo "IMPORTANT: Lint violations were found in files you modified."
+        if [ -n "$MESSAGE" ]; then
+            echo ""
+            echo "$MESSAGE"
+            echo ""
+        fi
+        echo "Your next action is to fix these lint violations now."
+        echo "Edit the files listed above to resolve each violation, then the governor will re-check automatically."
+        echo "</governor-directive>"
+        ;;
+    fixing_tests)
+        echo ""
+        echo "<governor-directive>"
+        echo "Tests are failing. Your next action is to write minimal production code to make the failing tests pass."
+        echo "Do not write new tests — focus on making the existing tests green."
+        echo "</governor-directive>"
+        ;;
+    writing_tests)
+        if [ "$EVENT" = "pytest_pass" ]; then
+            echo ""
+            echo "<governor-directive>"
+            echo "All tests pass and lint is clean. You are back in writing_tests state."
+            echo "Your next action is to write a failing test for the next acceptance criterion."
+            echo "You can only create/edit test_* files in this state."
+            echo "</governor-directive>"
+        fi
+        ;;
+esac
+
 exit 0
