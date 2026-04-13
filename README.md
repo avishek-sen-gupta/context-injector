@@ -39,6 +39,8 @@ The governor uses a **blocklist** approach — tools not listed are allowed. Eac
 | `red` | `Write`, `Edit` | — |
 | `fixing_tests` | *(none)* | — |
 | `green` | `Write`, `Edit` | — |
+| `linting` | `Write`, `Edit` | — |
+| `fixing_lint` | *(none)* | — |
 
 Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are always allowed.
 
@@ -67,18 +69,25 @@ Gates are transition guards — they run when a transition is about to fire, aft
 **Built-in gates:**
 
 - **TestQualityGate** — runs on `pytest_fail` in the TDD machine. Uses AST analysis to detect structurally invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
-- **LintGate** — runs on `pytest_pass` in the TDD machine. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
+- **LintGate** — runs on entry to the `linting` state. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
+- **ReassignmentGate** — runs on entry to the `linting` state alongside LintGate. Uses [beniget](https://github.com/serge-sans-paille/beniget) def-use chain analysis to detect variables or parameters assigned more than once within the same scope. Catches rebinding that structural pattern matching cannot detect.
 
-Machines register gates via `GUARDS` and `GATE_SOFTNESS`:
+Machines register gates via `GUARDS`, `GATE_SOFTNESS`, and `CHECK_STATES`:
 
 ```python
 GUARDS = {
     "pytest_fail": [TestQualityGate],
-    "pytest_pass": [LintGate],
 }
 GATE_SOFTNESS = {
     "test_quality": 0.1,   # Strict — override per project
-    "lint": 0.1,
+}
+# CHECK_STATES: gates that run on entry to a state, with pass/fail events
+CHECK_STATES = {
+    "linting": {
+        "gate": [LintGate, ReassignmentGate],  # multiple gates supported
+        "pass_event": "lint_pass",
+        "fail_event": "lint_fail",
+    },
 }
 ```
 
@@ -92,18 +101,22 @@ governor audit --all
 
 ### TDD cycle
 
-The default machine enforces a strict red-green TDD loop:
+The default machine enforces a strict red-green-lint TDD loop:
 
 ```
 writing_tests → (pytest fails) → red → (auto) → fixing_tests
-                                                       ↓
-writing_tests ← (auto) ← green ← (pytest passes) ←───┘
+      ↑                                               ↓
+      ├──── (lint pass) ← linting ← green ← (pytest passes)
+      │                      ↓
+      └── (lint pass) ← fixing_lint ← (lint fail)
 ```
 
 - **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited.
 - **red**: Transient — auto-advances to `fixing_tests`.
 - **fixing_tests**: Write production code to make tests pass. All files editable.
-- **green**: Transient — auto-advances back to `writing_tests`.
+- **green**: Transient — auto-advances to `linting`.
+- **linting**: Transient — runs LintGate and ReassignmentGate on modified files. Auto-advances to `writing_tests` (clean) or `fixing_lint` (violations).
+- **fixing_lint**: Fix lint violations. All files editable. Returns to `writing_tests` when lint passes.
 
 Transitions are **automatic** — driven by pytest results, not manual declarations.
 
@@ -117,9 +130,10 @@ The governor detects pytest results through two mechanisms:
 ### Built-in machines
 
 **TDD** (`machines.tdd.TDD`) — the default:
-- States: `writing_tests` → `red` → `fixing_tests` → `green` → `writing_tests`
+- States: `writing_tests` → `red` → `fixing_tests` → `green` → `linting` → `writing_tests` (with `fixing_lint` on violations)
 - Pytest-driven transitions with auto-advancing transient states
 - Blocklist-based tool restrictions
+- LintGate + ReassignmentGate run automatically when tests pass
 
 **TDDCycle** (`machines.tdd_cycle.TDDCycle`) — legacy:
 - States: `red` → `green` → `refactor` (+ `docs_detour`)
@@ -239,7 +253,7 @@ When both are active, context injection adds keyword-matched files via `UserProm
 
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
 - `jq` (for the automated installers)
-- Python 3 with `python-statemachine>=3.0.0` and `tinydb>=4.0.0` (governor only)
+- Python 3 with `python-statemachine>=3.0.0`, `tinydb>=4.0.0`, and `beniget>=0.5.0` (governor only)
 - [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for LintGate; gate passes silently if not installed
 
 ## Installation
@@ -295,11 +309,14 @@ for f in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
 done
 ```
 
-**2. Copy governor and machines:**
+**2. Copy governor, machines, gates, and lint rules:**
 ```bash
-mkdir -p ~/.claude/plugins/context-injector/{governor,machines}
+mkdir -p ~/.claude/plugins/context-injector/{governor,machines,gates,scripts/lint/rules}
 cp governor/*.py ~/.claude/plugins/context-injector/governor/
 cp machines/*.py ~/.claude/plugins/context-injector/machines/
+cp gates/*.py ~/.claude/plugins/context-injector/gates/
+cp scripts/lint/sgconfig.yml ~/.claude/plugins/context-injector/scripts/lint/
+cp scripts/lint/rules/*.yml ~/.claude/plugins/context-injector/scripts/lint/rules/
 ```
 
 **3. Copy command:**
