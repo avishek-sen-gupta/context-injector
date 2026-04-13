@@ -1,7 +1,8 @@
 #!/bin/sh
-# post-tool-use.sh — PostToolUse hook for pytest result detection.
-# Fires governor trigger_transition with pytest_fail or pytest_pass
-# based on the tool result after Bash(pytest*) commands.
+# post-tool-use.sh — PostToolUse hook for governor state transitions.
+# Handles two event sources:
+#   1. Bash(pytest*) results → fires pytest_pass / pytest_fail
+#   2. Edit/Write while in fixing_lint → runs lint, fires lint_pass / lint_fail
 # Exit 0 always (PostToolUse cannot block).
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -19,26 +20,36 @@ PLUGIN_DIR="$HOME/.claude/plugins/context-injector"
 # Read stdin (tool event JSON from Claude Code)
 INPUT=$(cat)
 
-# Only care about Bash tool
 TOOL_NAME=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))" 2>/dev/null)
-[ "$TOOL_NAME" = "Bash" ] || exit 0
 
-# Only care about pytest commands
-COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
-case "$COMMAND" in
-    pytest*|python*pytest*|python3*-m*pytest*) ;;
-    *) exit 0 ;;
-esac
+# Set environment for governor (needed by both paths)
+export CTX_STATE_DIR="/tmp/ctx-state"
+export CTX_AUDIT_DIR="$PWD/.claude/audit"
+export CTX_CONTEXT_DIR="$PWD/.claude"
+export CTX_PROJECT_HASH="$(project_hash "$PWD")"
 
-# Extract tool response to determine pass/fail
-# PostToolUse events include tool_response — structure varies by tool.
-# Try multiple known field names; fall back to stringifying the whole response.
-TOOL_RESPONSE=$(printf '%s' "$INPUT" | python3 -c "
+MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"
+if [ -f "$MACHINE_FILE" ]; then
+    export CTX_MACHINE="$(cat "$MACHINE_FILE")"
+else
+    export CTX_MACHINE="${CTX_MACHINE:-machines.tdd.TDD}"
+fi
+
+# --- Determine EVENT from tool results ---
+
+EVENT=""
+LINT_MESSAGE=""
+
+# Path 1: Bash(pytest*) → detect pass/fail from output
+if [ "$TOOL_NAME" = "Bash" ]; then
+    COMMAND=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))" 2>/dev/null)
+    case "$COMMAND" in
+        pytest*|python*pytest*|python3*-m*pytest*)
+            TOOL_RESPONSE=$(printf '%s' "$INPUT" | python3 -c "
 import sys, json
 event = json.load(sys.stdin)
 resp = event.get('tool_response', '')
 if isinstance(resp, dict):
-    # Try known field names for Bash output
     parts = []
     for key in ('stdout', 'stderr', 'output', 'content', 'result', 'text'):
         v = resp.get(key, '')
@@ -47,7 +58,6 @@ if isinstance(resp, dict):
     if parts:
         print('\n'.join(parts))
     else:
-        # Fallback: stringify the whole dict so grep can match
         print(json.dumps(resp))
 elif isinstance(resp, str):
     print(resp)
@@ -55,33 +65,44 @@ else:
     print(str(resp))
 " 2>/dev/null)
 
-# Determine pytest result from output
-# pytest exit code 0 = all passed, non-zero = failures
-# Look for pytest summary patterns
-if printf '%s' "$TOOL_RESPONSE" | grep -qE '(FAILED|ERROR|failed|error.*occurred)'; then
-    EVENT="pytest_fail"
-elif printf '%s' "$TOOL_RESPONSE" | grep -qE '(passed|no tests ran)'; then
-    EVENT="pytest_pass"
-else
-    # Can't determine result — skip
-    exit 0
+            if printf '%s' "$TOOL_RESPONSE" | grep -qE '(FAILED|ERROR|failed|error.*occurred)'; then
+                EVENT="pytest_fail"
+            elif printf '%s' "$TOOL_RESPONSE" | grep -qE '(passed|no tests ran)'; then
+                EVENT="pytest_pass"
+            fi
+            ;;
+    esac
 fi
 
-# Set environment for governor
-export CTX_STATE_DIR="/tmp/ctx-state"
-export CTX_AUDIT_DIR="$PWD/.claude/audit"
-export CTX_CONTEXT_DIR="$PWD/.claude"
-export CTX_PROJECT_HASH="$(project_hash "$PWD")"
+# Path 2: Edit/Write in fixing_lint → run lint on edited file
+if [ -z "$EVENT" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; }; then
+    STATE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.json"
+    CURRENT_STATE=$(python3 -c "
+import sys, json
+with open('$STATE_FILE') as f:
+    print(json.load(f).get('inner_state', ''))
+" 2>/dev/null)
 
-# Read machine config
-MACHINE_FILE="$CTX_STATE_DIR/$CTX_PROJECT_HASH.machine"
-if [ -f "$MACHINE_FILE" ]; then
-    export CTX_MACHINE="$(cat "$MACHINE_FILE")"
-else
-    export CTX_MACHINE="${CTX_MACHINE:-machines.tdd.TDD}"
+    if [ "$CURRENT_STATE" = "fixing_lint" ]; then
+        FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+        if [ -n "$FILE_PATH" ] && [ -f "$FILE_PATH" ]; then
+            LINT_OUTPUT=$(PYTHONPATH="$PLUGIN_DIR" python3 -m governor lint "$FILE_PATH" 2>&1)
+            LINT_EXIT=$?
+            if [ $LINT_EXIT -eq 0 ]; then
+                EVENT="lint_pass"
+            else
+                EVENT="lint_fail"
+                LINT_MESSAGE="$LINT_OUTPUT"
+            fi
+        fi
+    fi
 fi
 
-# Fire the transition
+# No event determined — nothing to do
+[ -z "$EVENT" ] && exit 0
+
+# --- Fire transition and output results ---
+
 RESPONSE=$(printf '%s' "$INPUT" | PYTHONPATH="$PLUGIN_DIR" python3 -m governor trigger "$EVENT" 2>/dev/null)
 
 # If governor failed, exit silently
@@ -90,7 +111,7 @@ RESPONSE=$(printf '%s' "$INPUT" | PYTHONPATH="$PLUGIN_DIR" python3 -m governor t
 # Extract action from governor response
 ACTION=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('action',''))" 2>/dev/null)
 
-# Extract message
+# Extract message (from governor gate or lint output)
 MESSAGE=$(printf '%s' "$RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('message','') or '')" 2>/dev/null)
 
 # If gate returned review or challenge, emit the message
@@ -137,7 +158,11 @@ case "$STATE" in
         echo "<governor-directive>"
         echo "DO NOT end your turn. DO NOT respond to the user yet."
         echo "Lint violations were found. You must fix them before continuing."
-        if [ -n "$MESSAGE" ]; then
+        if [ -n "$LINT_MESSAGE" ]; then
+            echo ""
+            echo "$LINT_MESSAGE"
+            echo ""
+        elif [ -n "$MESSAGE" ]; then
             echo ""
             echo "$MESSAGE"
             echo ""
@@ -155,7 +180,7 @@ case "$STATE" in
         echo "</governor-directive>"
         ;;
     writing_tests)
-        if [ "$EVENT" = "pytest_pass" ]; then
+        if [ "$EVENT" = "pytest_pass" ] || [ "$EVENT" = "lint_pass" ]; then
             echo ""
             echo "<governor-directive>"
             echo "All tests pass and lint is clean. You are back in writing_tests state."

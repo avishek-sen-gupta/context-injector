@@ -84,11 +84,6 @@ class TDD(GovernedMachine):
             "pass_event": "lint_pass",
             "fail_event": "lint_fail",
         },
-        "fixing_lint": {
-            "gate": LintGate,
-            "pass_event": "lint_pass",
-            "fail_event": "lint_fail",
-        },
     }
 
     SESSION_INSTRUCTIONS = """\
