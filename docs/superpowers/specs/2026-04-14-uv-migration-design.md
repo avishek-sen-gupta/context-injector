@@ -45,7 +45,12 @@ Replace `actions/setup-python` + manual pip install with:
 
 ### README
 
-Update dependencies and installation sections to reference `uv sync` for development setup.
+Update to clarify the two separate environments:
+
+- **Development** (`uv sync --dev`): Installs deps into `.venv/` for running tests and developing locally. This is what contributors use.
+- **Hook deployment** (`install-governor.sh`): Copies hook files to `~/.claude/plugins/context-injector/` and checks that runtime deps (`python-statemachine`, `tinydb`, `beniget`) and tools (`semgrep`) are available in the system Python. This is what end users run to activate the governor.
+
+These are independent — `uv sync` doesn't affect the hook runtime, and `install-governor.sh` doesn't use the project venv.
 
 ### No Changes
 
