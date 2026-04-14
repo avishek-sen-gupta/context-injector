@@ -31,70 +31,94 @@ def _make_context(tmp_path, files, rules_dir=None):
 
 @pytest.fixture
 def rules_dir(tmp_path):
-    """Create a minimal rules directory with one rule."""
-    rules = tmp_path / "rules"
-    rules.mkdir()
-    (rules / "no-bare-except.yml").write_text(
-        'id: no-bare-except\nlanguage: python\nrule:\n  pattern: |\n'
-        '    try:\n      $$$BODY\n    except:\n      $$$HANDLER\n'
-        'message: "Bare except"\nseverity: warning\n'
+    """Create a minimal rules directory with one Semgrep rule."""
+    semgrep_rules = tmp_path / "semgrep-rules.yml"
+    semgrep_rules.write_text(
+        "rules:\n"
+        "  - id: no-bare-except\n"
+        "    pattern: |\n"
+        "      try:\n"
+        "          ...\n"
+        "      except:\n"
+        "          ...\n"
+        '    message: "Bare except"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
     )
+    # Keep sgconfig.yml so _resolve_rules_dir still works
     sgconfig = tmp_path / "sgconfig.yml"
     sgconfig.write_text("ruleDirs:\n  - rules\n")
+    rules = tmp_path / "rules"
+    rules.mkdir()
     return str(tmp_path)
 
 
 @pytest.fixture
 def multi_rules_dir(tmp_path):
-    """Create a rules directory with multiple rules."""
-    rules = tmp_path / "rules"
-    rules.mkdir()
-    (rules / "no-bare-except.yml").write_text(
-        'id: no-bare-except\nlanguage: python\nrule:\n  pattern: |\n'
-        '    try:\n      $$$BODY\n    except:\n      $$$HANDLER\n'
-        'message: "Bare except"\nseverity: warning\n'
-    )
-    (rules / "no-print.yml").write_text(
-        'id: no-print\nlanguage: python\nrule:\n  pattern: print($$$ARGS)\n'
-        'message: "print() — use logging"\nseverity: warning\n'
+    """Create a rules directory with multiple Semgrep rules."""
+    semgrep_rules = tmp_path / "semgrep-rules.yml"
+    semgrep_rules.write_text(
+        "rules:\n"
+        "  - id: no-bare-except\n"
+        "    pattern: |\n"
+        "      try:\n"
+        "          ...\n"
+        "      except:\n"
+        "          ...\n"
+        '    message: "Bare except"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
+        "  - id: no-print\n"
+        "    pattern: print(...)\n"
+        '    message: "print() — use logging"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
     )
     sgconfig = tmp_path / "sgconfig.yml"
     sgconfig.write_text("ruleDirs:\n  - rules\n")
+    rules = tmp_path / "rules"
+    rules.mkdir()
     return str(tmp_path)
 
 
 @pytest.fixture
 def mutation_rules_dir(tmp_path):
-    """Create a rules directory with subscript mutation rules."""
-    rules = tmp_path / "rules"
-    rules.mkdir()
-    (rules / "no-subscript-mutation.yml").write_text(
-        'id: no-subscript-mutation\nlanguage: python\nrule:\n'
-        '  pattern: $OBJ[$KEY] = $VAL\n'
-        'message: "Subscript mutation"\nseverity: warning\n'
-    )
-    (rules / "no-subscript-augmented-mutation.yml").write_text(
-        'id: no-subscript-augmented-mutation\nlanguage: python\nrule:\n'
-        '  any:\n'
-        '    - pattern: $OBJ[$KEY] += $VAL\n'
-        '    - pattern: $OBJ[$KEY] -= $VAL\n'
-        '    - pattern: $OBJ[$KEY] *= $VAL\n'
-        'message: "Subscript augmented mutation"\nseverity: warning\n'
-    )
-    (rules / "no-subscript-del.yml").write_text(
-        'id: no-subscript-del\nlanguage: python\nrule:\n'
-        '  pattern: del $OBJ[$KEY]\n'
-        'message: "Subscript deletion"\nseverity: warning\n'
-    )
-    (rules / "no-subscript-tuple-mutation.yml").write_text(
-        'id: no-subscript-tuple-mutation\nlanguage: python\nrule:\n'
-        '  any:\n'
-        '    - pattern: $OBJ[$KEY], $$$REST = $$$VALS\n'
-        '    - pattern: $$$REST, $OBJ[$KEY] = $$$VALS\n'
-        'message: "Tuple subscript mutation"\nseverity: warning\n'
+    """Create a rules directory with subscript mutation Semgrep rules."""
+    semgrep_rules = tmp_path / "semgrep-rules.yml"
+    semgrep_rules.write_text(
+        "rules:\n"
+        "  - id: no-subscript-mutation\n"
+        "    pattern: $OBJ[$KEY] = $VAL\n"
+        '    message: "Subscript mutation"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
+        "  - id: no-subscript-augmented-mutation\n"
+        "    patterns:\n"
+        "      - pattern-either:\n"
+        "          - pattern: $OBJ[$KEY] += $VAL\n"
+        "          - pattern: $OBJ[$KEY] -= $VAL\n"
+        "          - pattern: $OBJ[$KEY] *= $VAL\n"
+        '    message: "Subscript augmented mutation"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
+        "  - id: no-subscript-del\n"
+        "    pattern: del $OBJ[$KEY]\n"
+        '    message: "Subscript deletion"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
+        "  - id: no-subscript-tuple-mutation\n"
+        "    patterns:\n"
+        "      - pattern-either:\n"
+        "          - pattern: $OBJ[$KEY], ... = ...\n"
+        "          - pattern: ..., $OBJ[$KEY] = ...\n"
+        '    message: "Tuple subscript mutation"\n'
+        "    severity: WARNING\n"
+        "    languages: [python]\n"
     )
     sgconfig = tmp_path / "sgconfig.yml"
     sgconfig.write_text("ruleDirs:\n  - rules\n")
+    rules = tmp_path / "rules"
+    rules.mkdir()
     return str(tmp_path)
 
 
@@ -220,8 +244,8 @@ class TestResolveRulesDir:
         assert result is None
 
 
-class TestLintGateWithoutSg:
-    """Tests that work without ast-grep installed."""
+class TestLintGateWithoutTools:
+    """Tests that work without linting tools installed."""
 
     def test_passes_when_no_python_files(self, tmp_path, rules_dir):
         path = _make_file(tmp_path, "README.md", "# Hello")
@@ -236,14 +260,15 @@ class TestLintGateWithoutSg:
         result = gate.evaluate(ctx)
         assert result.verdict == GateVerdict.PASS
 
-    def test_passes_when_sg_not_found(self, tmp_path, rules_dir, monkeypatch):
-        """If ast-grep is not installed, gate should pass (not block)."""
+    def test_fails_when_semgrep_not_found(self, tmp_path, rules_dir, monkeypatch):
+        """If semgrep is not installed, gate should FAIL."""
         path = _make_file(tmp_path, "widget.py", "try:\n    pass\nexcept:\n    pass\n")
         ctx = _make_context(str(tmp_path), [path])
         monkeypatch.setattr(shutil, "which", lambda _: None)
         gate = LintGate(rules_dir=rules_dir)
         result = gate.evaluate(ctx)
-        assert result.verdict == GateVerdict.PASS
+        assert result.verdict == GateVerdict.FAIL
+        assert "semgrep" in result.message.lower()
 
     def test_filters_to_python_files_only(self, tmp_path, rules_dir):
         py_path = _make_file(tmp_path, "widget.py", "x = 1\n")
@@ -262,9 +287,9 @@ class TestLintGateWithoutSg:
         assert filtered == []
 
 
-@needs_sg
-class TestLintGateWithSg:
-    """Tests that require ast-grep installed."""
+@needs_semgrep
+class TestLintGateWithSemgrep:
+    """Tests that require Semgrep installed."""
 
     def test_clean_file_passes(self, tmp_path, rules_dir):
         path = _make_file(tmp_path, "widget.py", "def compute():\n    return 42\n")
