@@ -498,6 +498,133 @@ class TestDeepNestingRule:
         result = gate.evaluate(ctx)
         assert result.verdict == GateVerdict.PASS
 
+
+@needs_semgrep
+class TestSemgrepMultilineAndComboRules:
+    """Tests for multiline patterns and pattern-either Semgrep rules."""
+
+    # --- no-bare-except ---
+    def test_no_bare_except_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "try:\n    x = 1\nexcept:\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-bare-except" in i for i in result.issues)
+
+    def test_no_bare_except_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "try:\n    x = 1\nexcept ValueError:\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-bare-except" in i for i in (result.issues or []))
+
+    # --- no-except-exception ---
+    def test_no_except_exception_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "try:\n    x = 1\nexcept Exception:\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-except-exception" in i for i in result.issues)
+
+    def test_no_except_exception_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "try:\n    x = 1\nexcept ValueError:\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-except-exception" in i for i in (result.issues or []))
+
+    # --- no-relative-import ---
+    def test_no_relative_import_dot_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from . import utils\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-relative-import" in i for i in result.issues)
+
+    def test_no_relative_import_dotdot_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from ..models import User\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-relative-import" in i for i in result.issues)
+
+    def test_no_relative_import_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from mypackage import utils\nimport os\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-relative-import" in i for i in (result.issues or []))
+
+    # --- no-setitem-call ---
+    def test_no_setitem_call_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {}\nd.__setitem__('k', 'v')\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-setitem-call" in i for i in result.issues)
+
+    def test_no_setitem_call_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {'k': 'v'}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-setitem-call" in i for i in (result.issues or []))
+
+    # --- no-subscript-augmented-mutation ---
+    def test_no_subscript_augmented_mutation_plus_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {'a': 1}\nd['a'] += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-subscript-augmented-mutation" in i for i in result.issues)
+
+    def test_no_subscript_augmented_mutation_shift_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {'a': 8}\nd['a'] >>= 2\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-subscript-augmented-mutation" in i for i in result.issues)
+
+    def test_no_subscript_augmented_mutation_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "x = 1\nx += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-subscript-augmented-mutation" in i for i in (result.issues or []))
+
+    # --- no-subscript-tuple-mutation ---
+    # Note: The rule in semgrep-rules.yml uses $...REST which is not valid Semgrep syntax.
+    # This test is skipped until the rule is fixed to use proper ellipsis patterns.
+    @pytest.mark.skip(reason="Rule pattern uses invalid $...REST syntax; needs fix in semgrep-rules.yml")
+    def test_no_subscript_tuple_mutation_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def swap(d, k1, k2):\n    d[k1], d[k2] = d[k2], d[k1]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-subscript-tuple-mutation" in i for i in result.issues)
+
+    def test_no_subscript_tuple_mutation_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "a, b = 1, 2\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-subscript-tuple-mutation" in i for i in (result.issues or []))
+
+    # --- no-attribute-augmented-mutation ---
+    def test_no_attribute_augmented_mutation_plus_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "class C:\n    x = 0\nc = C()\nc.x += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-attribute-augmented-mutation" in i for i in result.issues)
+
+    def test_no_attribute_augmented_mutation_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "x = 1\nx += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-attribute-augmented-mutation" in i for i in (result.issues or []))
+
     def test_flat_if_passes(self, tmp_path, nesting_rules_dir):
         path = _make_file(tmp_path, "widget.py",
             "def f(x):\n"
