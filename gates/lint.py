@@ -1,8 +1,9 @@
 # gates/lint.py
-"""LintGate — ast-grep based lint checking at transition boundaries.
+"""LintGate — dual-backend lint checking at transition boundaries.
 
-Runs ast-grep with project lint rules on recently modified Python files.
-Blocks the transition if any violations are found.
+Runs Semgrep for the majority of lint rules, then ast-grep for the
+rules that require tree-sitter-specific features (stopBy, has+kind).
+Results are merged into a single violation list.
 """
 
 import json
@@ -14,7 +15,7 @@ from gates.base import Gate, GateContext, GateResult, GateVerdict
 
 
 class LintGate(Gate):
-    """Gate that runs ast-grep lint rules on touched files."""
+    """Gate that runs Semgrep and ast-grep lint rules on touched files."""
 
     name = "lint"
 
@@ -26,15 +27,31 @@ class LintGate(Gate):
         if not py_files:
             return GateResult(GateVerdict.PASS)
 
-        sg = self._find_sg()
-        if sg is None:
-            return GateResult(GateVerdict.PASS)
-
         rules_dir = self._resolve_rules_dir(ctx.project_root)
         if rules_dir is None:
             return GateResult(GateVerdict.PASS)
 
-        violations = self._run_sg(sg, rules_dir, py_files)
+        # Semgrep is required
+        semgrep = self._find_semgrep()
+        if semgrep is None:
+            return GateResult(
+                GateVerdict.FAIL,
+                message="GATE: lint — semgrep binary not found. Install with: pip install semgrep",
+            )
+
+        violations = []
+
+        # Run Semgrep (26 rules)
+        semgrep_rules = os.path.join(rules_dir, "semgrep-rules.yml")
+        if os.path.exists(semgrep_rules):
+            violations.extend(self._run_semgrep(semgrep, semgrep_rules, py_files))
+
+        # Run ast-grep (2 remaining rules) — optional
+        sg = self._find_sg()
+        sgconfig = os.path.join(rules_dir, "sgconfig.yml")
+        if sg is not None and os.path.exists(sgconfig):
+            violations.extend(self._run_sg(sg, rules_dir, py_files))
+
         if not violations:
             return GateResult(GateVerdict.PASS)
 
@@ -58,6 +75,11 @@ class LintGate(Gate):
         return result
 
     @staticmethod
+    def _find_semgrep() -> str | None:
+        """Find the semgrep binary."""
+        return shutil.which("semgrep")
+
+    @staticmethod
     def _find_sg() -> str | None:
         """Find the ast-grep binary."""
         return shutil.which("sg") or shutil.which("ast-grep")
@@ -77,7 +99,10 @@ class LintGate(Gate):
         if config_dir:
             candidates.append(config_dir)
         for candidate in candidates:
-            if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "sgconfig.yml")):
+            if os.path.isdir(candidate) and (
+                os.path.exists(os.path.join(candidate, "sgconfig.yml"))
+                or os.path.exists(os.path.join(candidate, "semgrep-rules.yml"))
+            ):
                 return candidate
         return None
 
@@ -97,6 +122,39 @@ class LintGate(Gate):
             return None
 
     @staticmethod
+    def _run_semgrep(semgrep_path: str, rules_file: str, files: list[str]) -> list[dict]:
+        """Run Semgrep scan on the given files and return parsed violations."""
+        try:
+            result = subprocess.run(
+                [semgrep_path, "scan", "--config", rules_file, "--json", "--no-git-ignore"] + files,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return []
+
+        if not result.stdout.strip():
+            return []
+
+        violations = []
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return []
+
+        for entry in data.get("results", []):
+            violations.append({
+                "ruleId": entry.get("check_id", "unknown").rsplit(".", 1)[-1],
+                "file": entry.get("path", ""),
+                "line": entry.get("start", {}).get("line", 0),
+                "message": entry.get("extra", {}).get("message", ""),
+                "source": entry.get("extra", {}).get("lines", "").strip(),
+            })
+
+        return violations
+
+    @staticmethod
     def _run_sg(sg_path: str, rules_dir: str, files: list[str]) -> list[dict]:
         """Run ast-grep scan on the given files and return parsed violations."""
         try:
@@ -114,11 +172,9 @@ class LintGate(Gate):
             return []
 
         violations = []
-        # ast-grep --json outputs a JSON array
         try:
             entries = json.loads(result.stdout)
         except json.JSONDecodeError:
-            # Fall back to JSONL (one object per line)
             entries = []
             for line in result.stdout.strip().splitlines():
                 try:

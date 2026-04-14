@@ -104,6 +104,26 @@ needs_sg = pytest.mark.skipif(
 )
 
 
+needs_semgrep = pytest.mark.skipif(
+    shutil.which("semgrep") is None,
+    reason="semgrep not installed",
+)
+
+
+class TestLintGateSemgrepRequired:
+    """Tests for Semgrep as a hard dependency."""
+
+    def test_fails_when_semgrep_missing(self, tmp_path, rules_dir, monkeypatch):
+        """Gate should FAIL (not pass) when semgrep is missing."""
+        path = _make_file(tmp_path, "widget.py", "x = 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        gate = LintGate(rules_dir=rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert "semgrep" in result.message.lower()
+
+
 class TestResolveRulesDir:
     """Tests for rules directory resolution logic."""
 
