@@ -20,7 +20,9 @@ jobs:
         run: uv sync --dev
 
       - name: Install semgrep
-        run: uv tool install semgrep
+        run: uv pip install semgrep
 
       - name: Run tests
         run: uv run pytest tests/ -v
+        env:
+          PATH: ${{ github.workspace }}/.venv/bin:$PATH
