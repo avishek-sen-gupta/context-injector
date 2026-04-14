@@ -163,8 +163,8 @@ rules:
   - id: no-subscript-tuple-mutation
     patterns:
       - pattern-either:
-          - pattern: $OBJ[$KEY], $...REST = $...VALS
-          - pattern: $...REST, $OBJ[$KEY] = $...VALS
+          - pattern: $OBJ[$KEY], ... = ...
+          - pattern: ..., $OBJ[$KEY] = ...
     message: "Tuple subscript mutation — use immutable update patterns"
     severity: WARNING
     languages: [python]

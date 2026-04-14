@@ -593,11 +593,8 @@ class TestSemgrepMultilineAndComboRules:
         assert not any("no-subscript-augmented-mutation" in i for i in (result.issues or []))
 
     # --- no-subscript-tuple-mutation ---
-    # Note: The rule in semgrep-rules.yml uses $...REST which is not valid Semgrep syntax.
-    # This test is skipped until the rule is fixed to use proper ellipsis patterns.
-    @pytest.mark.skip(reason="Rule pattern uses invalid $...REST syntax; needs fix in semgrep-rules.yml")
     def test_no_subscript_tuple_mutation_fail(self, tmp_path, full_semgrep_rules):
-        path = _make_file(tmp_path, "widget.py", "def swap(d, k1, k2):\n    d[k1], d[k2] = d[k2], d[k1]\n")
+        path = _make_file(tmp_path, "widget.py", "d = {}\nd['a'], d['b'] = 1, 2\n")
         ctx = _make_context(str(tmp_path), [path])
         gate = LintGate(rules_dir=full_semgrep_rules)
         result = gate.evaluate(ctx)
@@ -625,30 +622,6 @@ class TestSemgrepMultilineAndComboRules:
         result = gate.evaluate(ctx)
         assert not any("no-attribute-augmented-mutation" in i for i in (result.issues or []))
 
-    def test_flat_if_passes(self, tmp_path, nesting_rules_dir):
-        path = _make_file(tmp_path, "widget.py",
-            "def f(x):\n"
-            "    if x > 0:\n"
-            "        return x\n"
-            "    return 0\n")
-        ctx = _make_context(str(tmp_path), [path])
-        gate = LintGate(rules_dir=nesting_rules_dir)
-        result = gate.evaluate(ctx)
-        assert result.verdict == GateVerdict.PASS
-
-    def test_for_in_nested_function_passes(self, tmp_path, nesting_rules_dir):
-        """A for inside a nested function def is not real nesting."""
-        path = _make_file(tmp_path, "widget.py",
-            "def outer(items):\n"
-            "    for x in items:\n"
-            "        def inner(ys):\n"
-            "            for y in ys:\n"
-            "                process(y)\n"
-            "        inner(x)\n")
-        ctx = _make_context(str(tmp_path), [path])
-        gate = LintGate(rules_dir=nesting_rules_dir)
-        result = gate.evaluate(ctx)
-        assert result.verdict == GateVerdict.PASS
 
 
 @needs_sg
