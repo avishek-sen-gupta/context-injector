@@ -26,7 +26,7 @@ if ! python3 -c "import tinydb" 2>/dev/null; then
 fi
 
 if ! python3 -c "import beniget" 2>/dev/null; then
-  echo "Warning: beniget not found (needed by ReassignmentGate). Install with: pip3 install beniget>=0.5.0" >&2
+  echo "Warning: beniget not found (needed by python-fp-lint ReassignmentGate). Install with: pip3 install beniget>=0.5.0" >&2
 fi
 
 if ! command -v semgrep > /dev/null 2>&1; then
@@ -86,18 +86,30 @@ cp "$PLUGIN_DIR/gates/test_quality.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/lint.py" "$GATES_DIR/"
 cp "$PLUGIN_DIR/gates/reassignment.py" "$GATES_DIR/"
 
-# --- install lint rules ---
+# --- install lint rules (from python-fp-lint submodule) ---
 echo "Installing lint rules..."
+LINT_SRC="$PLUGIN_DIR/scripts/lint"
+if [ ! -d "$LINT_SRC/python_fp_lint" ]; then
+  echo "Initializing submodule..."
+  (cd "$PLUGIN_DIR" && git submodule update --init scripts/lint)
+fi
+
 LINT_DIR="$HOME/.claude/plugins/context-injector/scripts/lint"
+mkdir -p "$LINT_DIR/python_fp_lint/rules"
+cp "$LINT_SRC/python_fp_lint/semgrep-rules.yml" "$LINT_DIR/python_fp_lint/"
+cp "$LINT_SRC/python_fp_lint/sgconfig.yml" "$LINT_DIR/python_fp_lint/"
+cp "$LINT_SRC/python_fp_lint/rules/"*.yml "$LINT_DIR/python_fp_lint/rules/"
+cp "$LINT_SRC/python_fp_lint/"*.py "$LINT_DIR/python_fp_lint/"
+# Also copy to legacy paths for config.json compatibility
+cp "$LINT_SRC/python_fp_lint/semgrep-rules.yml" "$LINT_DIR/"
+cp "$LINT_SRC/python_fp_lint/sgconfig.yml" "$LINT_DIR/"
 mkdir -p "$LINT_DIR/rules"
-cp "$PLUGIN_DIR/scripts/lint/sgconfig.yml" "$LINT_DIR/"
-cp "$PLUGIN_DIR/scripts/lint/semgrep-rules.yml" "$LINT_DIR/"
-cp "$PLUGIN_DIR/scripts/lint/rules/"*.yml "$LINT_DIR/rules/"
+cp "$LINT_SRC/python_fp_lint/rules/"*.yml "$LINT_DIR/rules/"
 
 # --- write plugin config ---
 echo "Writing plugin config..."
 CONFIG_FILE="$HOME/.claude/plugins/context-injector/config.json"
-LINT_RULES_PATH="$HOME/.claude/plugins/context-injector/scripts/lint"
+LINT_RULES_PATH="$HOME/.claude/plugins/context-injector/scripts/lint/python_fp_lint"
 printf '{"lint_rules_dir": "%s"}\n' "$LINT_RULES_PATH" > "$CONFIG_FILE"
 
 # --- create settings.json if missing ---

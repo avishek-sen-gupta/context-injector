@@ -5,7 +5,6 @@ requires-python = ">=3.10"
 dependencies = [
     "python-statemachine>=3.0.0",
     "tinydb>=4.0.0",
-    "beniget>=0.5.0",
 ]
 
 [project.optional-dependencies]
