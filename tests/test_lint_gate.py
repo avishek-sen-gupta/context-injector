@@ -1092,3 +1092,98 @@ class TestSemgrepSimplePatternRules:
         gate = LintGate(rules_dir=full_semgrep_rules)
         result = gate.evaluate(ctx)
         assert not any("no-static-method" in i for i in (result.issues or []))
+
+
+@pytest.fixture
+def dual_backend_rules_dir(tmp_path):
+    """Create a rules directory with both Semgrep and ast-grep rules."""
+    import shutil as _shutil
+    # Copy Semgrep rules
+    src_semgrep = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                               "scripts", "lint", "semgrep-rules.yml")
+    _shutil.copy(src_semgrep, tmp_path / "semgrep-rules.yml")
+    # Copy ast-grep rules
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    for rule in ["no-deep-nesting.yml", "no-loop-mutation.yml"]:
+        src = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                           "scripts", "lint", "rules", rule)
+        _shutil.copy(src, rules / rule)
+    sgconfig = tmp_path / "sgconfig.yml"
+    sgconfig.write_text("ruleDirs:\n  - rules\n")
+    return str(tmp_path)
+
+
+@needs_semgrep
+class TestLintGateDualBackend:
+    """Integration tests for the dual-backend LintGate."""
+
+    def test_no_violations_passes(self, tmp_path, dual_backend_rules_dir):
+        path = _make_file(tmp_path, "widget.py", "def compute():\n    return 42\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    @needs_sg
+    def test_both_backends_violations_merged(self, tmp_path, dual_backend_rules_dir):
+        """File with Semgrep violation (.append) AND ast-grep violation (nested for)."""
+        code = (
+            "def f(matrix):\n"
+            "    result = []\n"
+            "    result.append(1)\n"
+            "    for row in matrix:\n"
+            "        for cell in row:\n"
+            "            pass\n"
+        )
+        path = _make_file(tmp_path, "widget.py", code)
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        rule_ids = " ".join(result.issues)
+        assert "no-list-append" in rule_ids
+        assert "no-deep-nesting" in rule_ids
+
+    def test_semgrep_only_violation(self, tmp_path, dual_backend_rules_dir):
+        path = _make_file(tmp_path, "widget.py", "items = []\nitems.append(1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-list-append" in i for i in result.issues)
+
+    @needs_sg
+    def test_ast_grep_only_violation(self, tmp_path, dual_backend_rules_dir):
+        code = (
+            "def f(matrix):\n"
+            "    for row in matrix:\n"
+            "        for cell in row:\n"
+            "            pass\n"
+        )
+        path = _make_file(tmp_path, "widget.py", code)
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-deep-nesting" in i for i in result.issues)
+
+    def test_semgrep_missing_fails_gate(self, tmp_path, dual_backend_rules_dir, monkeypatch):
+        path = _make_file(tmp_path, "widget.py", "x = 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        monkeypatch.setattr(shutil, "which", lambda _: None)
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert "semgrep" in result.message.lower()
+
+    def test_ast_grep_missing_semgrep_still_works(self, tmp_path, dual_backend_rules_dir, monkeypatch):
+        """When ast-grep is missing, Semgrep violations are still reported."""
+        original_which = shutil.which
+        monkeypatch.setattr(shutil, "which", lambda cmd: None if cmd in ("sg", "ast-grep") else original_which(cmd))
+        path = _make_file(tmp_path, "widget.py", "items = []\nitems.append(1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=dual_backend_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-list-append" in i for i in result.issues)
