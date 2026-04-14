@@ -100,9 +100,9 @@ Exit guard on `writing_tests` in the TDD machine. Prevents leaving the test-writ
 
 #### LintGate
 
-Runs on entry to the `linting` state. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
+Runs on entry to the `linting` state. Uses a **dual-backend** architecture: [Semgrep](https://semgrep.dev/) (required, 26 rules) runs first, then [ast-grep](https://ast-grep.github.io/) (optional, 2 rules) for rules that require tree-sitter-specific features (`stopBy`). Results are merged into a single violation list. Blocks the transition if any violations are found. Fails if Semgrep is not installed; passes gracefully if ast-grep is missing.
 
-Rules are loaded from `scripts/lint/rules/*.yml`. The current rule set enforces immutable-style Python:
+Semgrep rules are in `scripts/lint/semgrep-rules.yml`; ast-grep rules are in `scripts/lint/rules/*.yml`. The current rule set (28 rules) enforces immutable-style Python:
 
 | Rule | What it blocks |
 |---|---|
@@ -131,8 +131,9 @@ Rules are loaded from `scripts/lint/rules/*.yml`. The current rule set enforces 
 | `no-print` | `print()` — use logging |
 | `no-relative-import` | `from . import` — use absolute imports |
 | `no-static-method` | `@staticmethod` — use module-level functions |
-| `no-deep-nesting` | Any `for`/`if` nested inside another `for`/`if` (depth 2+) — use comprehensions, `itertools`, or extract a helper. Stops at function boundaries so nested `def`s don't false-positive. |
-| `no-loop-mutation` | Any mutation call inside a `for` body — append, extend, insert, pop, remove, add, discard, clear, update, setdefault, subscript assignment, `del`, augmented assignment. Use comprehensions, `reduce`, or functional patterns. Stops at function boundaries. |
+| `no-optional-none` | `Optional[T]`, `T | None`, `Union[T, None]` — use sentinel values or separate code paths |
+| `no-deep-nesting` | *(ast-grep)* Any `for`/`if` nested inside another `for`/`if` (depth 2+) — use comprehensions, `itertools`, or extract a helper. Stops at function boundaries so nested `def`s don't false-positive. |
+| `no-loop-mutation` | *(ast-grep)* Any mutation call inside a `for` body — append, extend, insert, pop, remove, add, discard, clear, update, setdefault, subscript assignment, `del`, augmented assignment. Use comprehensions, `reduce`, or functional patterns. Stops at function boundaries. |
 
 Rules are project-local (`scripts/lint/`) by default; falls back to the plugin's installed copy via `config.json`.
 
@@ -340,7 +341,8 @@ When multiple modes are active they don't conflict — each operates on its own 
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
 - `jq` (for the automated installers)
 - Python 3 with `python-statemachine>=3.0.0`, `tinydb>=4.0.0`, and `beniget>=0.5.0` (governor only)
-- [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for LintGate; gate passes silently if not installed
+- [Semgrep](https://semgrep.dev/) — required for LintGate (26 rules); `pip install semgrep`
+- [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for 2 LintGate rules (`no-deep-nesting`, `no-loop-mutation`); gate passes silently if not installed
 
 ## Installation
 
