@@ -617,3 +617,247 @@ class TestLoopMutationRule:
         gate = LintGate(rules_dir=loop_mutation_rules_dir)
         result = gate.evaluate(ctx)
         assert result.verdict == GateVerdict.PASS
+
+
+@pytest.fixture
+def full_semgrep_rules(tmp_path):
+    """Create a rules directory pointing to the real semgrep-rules.yml."""
+    import shutil as _shutil
+    src = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                       "scripts", "lint", "semgrep-rules.yml")
+    _shutil.copy(src, tmp_path / "semgrep-rules.yml")
+    # Also need sgconfig.yml for _resolve_rules_dir
+    sgconfig = tmp_path / "sgconfig.yml"
+    sgconfig.write_text("ruleDirs:\n  - rules\n")
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    return str(tmp_path)
+
+
+@needs_semgrep
+class TestSemgrepSimplePatternRules:
+    """Comprehensive tests for simple-pattern Semgrep rules."""
+
+    def test_no_list_append_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = []\nitems.append(1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-list-append" in i for i in result.issues)
+
+    def test_no_list_append_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1, 2, 3]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-list-append" in i for i in (result.issues or []))
+
+    def test_no_list_extend_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = []\nitems.extend([1, 2])\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-list-extend" in i for i in result.issues)
+
+    def test_no_list_extend_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1] + [2, 3]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-list-extend" in i for i in (result.issues or []))
+
+    def test_no_list_insert_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [2, 3]\nitems.insert(0, 1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-list-insert" in i for i in result.issues)
+
+    def test_no_list_insert_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1] + [2, 3]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-list-insert" in i for i in (result.issues or []))
+
+    def test_no_list_pop_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1, 2, 3]\nitems.pop(0)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-list-pop" in i for i in result.issues)
+
+    def test_no_list_pop_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1, 2, 3]\nfirst, rest = items[0], items[1:]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-list-pop" in i for i in (result.issues or []))
+
+    def test_no_list_remove_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [1, 2, 3]\nitems.remove(2)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-list-remove" in i for i in result.issues)
+
+    def test_no_list_remove_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "items = [x for x in [1, 2, 3] if x != 2]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-list-remove" in i for i in (result.issues or []))
+
+    def test_no_dict_clear_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {1: 2}\nd.clear()\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-dict-clear" in i for i in result.issues)
+
+    def test_no_dict_clear_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-dict-clear" in i for i in (result.issues or []))
+
+    def test_no_dict_update_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {}\nd.update({1: 2})\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-dict-update" in i for i in result.issues)
+
+    def test_no_dict_update_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {**a, **b}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-dict-update" in i for i in (result.issues or []))
+
+    def test_no_dict_setdefault_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {}\nd.setdefault('k', [])\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-dict-setdefault" in i for i in result.issues)
+
+    def test_no_dict_setdefault_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from collections import defaultdict\nd = defaultdict(list)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-dict-setdefault" in i for i in (result.issues or []))
+
+    def test_no_set_add_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "s = set()\ns.add(1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-set-add" in i for i in result.issues)
+
+    def test_no_set_add_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "s = {1} | {2}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-set-add" in i for i in (result.issues or []))
+
+    def test_no_set_discard_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "s = {1, 2}\ns.discard(1)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-set-discard" in i for i in result.issues)
+
+    def test_no_set_discard_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "s = {1, 2} - {1}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-set-discard" in i for i in (result.issues or []))
+
+    def test_no_subscript_mutation_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {}\nd['key'] = 'val'\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-subscript-mutation" in i for i in result.issues)
+
+    def test_no_subscript_mutation_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {'key': 'val'}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-subscript-mutation" in i for i in (result.issues or []))
+
+    def test_no_subscript_del_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {'a': 1}\ndel d['a']\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-subscript-del" in i for i in result.issues)
+
+    def test_no_subscript_del_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "d = {k: v for k, v in d.items() if k != 'a'}\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-subscript-del" in i for i in (result.issues or []))
+
+    def test_no_is_none_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x):\n    if x is None:\n        return 0\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-is-none" in i for i in result.issues)
+
+    def test_no_is_none_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x):\n    if x == 0:\n        return 0\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-is-none" in i for i in (result.issues or []))
+
+    def test_no_is_not_none_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x):\n    if x is not None:\n        return x\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-is-not-none" in i for i in result.issues)
+
+    def test_no_is_not_none_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x):\n    if x != 0:\n        return x\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-is-not-none" in i for i in (result.issues or []))
+
+    def test_no_print_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "print('hello')\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-print" in i for i in result.issues)
+
+    def test_no_print_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "import logging\nlogging.info('hello')\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-print" in i for i in (result.issues or []))
+
+    def test_no_static_method_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "class Foo:\n    @staticmethod\n    def bar():\n        pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-static-method" in i for i in result.issues)
+
+    def test_no_static_method_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "class Foo:\n    @classmethod\n    def bar(cls):\n        pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-static-method" in i for i in (result.issues or []))
