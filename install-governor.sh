@@ -29,6 +29,11 @@ if ! python3 -c "import beniget" 2>/dev/null; then
   echo "Warning: beniget not found (needed by ReassignmentGate). Install with: pip3 install beniget>=0.5.0" >&2
 fi
 
+if ! command -v semgrep > /dev/null 2>&1; then
+  echo "Error: semgrep is required but not found. Install with: pip install semgrep" >&2
+  exit 1
+fi
+
 if [ ! -d "$PROJECT_DIR/.claude" ]; then
   echo "Error: no .claude/ directory found in $PROJECT_DIR. Run from a Claude Code project root." >&2
   exit 1
@@ -83,10 +88,11 @@ cp "$PLUGIN_DIR/gates/reassignment.py" "$GATES_DIR/"
 
 # --- install lint rules ---
 echo "Installing lint rules..."
-LINT_DIR="$HOME/.claude/plugins/context-injector/scripts/lint/rules"
-mkdir -p "$LINT_DIR"
-cp "$PLUGIN_DIR/scripts/lint/sgconfig.yml" "$HOME/.claude/plugins/context-injector/scripts/lint/"
-cp "$PLUGIN_DIR/scripts/lint/rules/"*.yml "$LINT_DIR/"
+LINT_DIR="$HOME/.claude/plugins/context-injector/scripts/lint"
+mkdir -p "$LINT_DIR/rules"
+cp "$PLUGIN_DIR/scripts/lint/sgconfig.yml" "$LINT_DIR/"
+cp "$PLUGIN_DIR/scripts/lint/semgrep-rules.yml" "$LINT_DIR/"
+cp "$PLUGIN_DIR/scripts/lint/rules/"*.yml "$LINT_DIR/rules/"
 
 # --- write plugin config ---
 echo "Writing plugin config..."
