@@ -623,6 +623,137 @@ class TestSemgrepMultilineAndComboRules:
         assert not any("no-attribute-augmented-mutation" in i for i in (result.issues or []))
 
 
+@needs_semgrep
+class TestSemgrepComplexRules:
+    """Tests for rules using pattern-not, pattern-inside, and the new no-optional-none rule."""
+
+    # --- no-local-augmented-mutation ---
+    def test_no_local_augmented_mutation_local_var_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "x = 1\nx += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-local-augmented-mutation" in i for i in result.issues)
+
+    def test_no_local_augmented_mutation_all_operators(self, tmp_path, full_semgrep_rules):
+        """All 12 augmented assignment operators on local vars should be caught."""
+        code = (
+            "a = 1\na += 1\n"
+            "b = 1\nb -= 1\n"
+            "c = 1\nc *= 2\n"
+            "d = 1\nd /= 2\n"
+            "e = 1\ne //= 2\n"
+            "f = 1\nf **= 2\n"
+            "g = 10\ng %= 3\n"
+            "h = 0xFF\nh &= 0x0F\n"
+            "i = 0x0F\ni |= 0xF0\n"
+            "j = 0xFF\nj ^= 0x0F\n"
+            "k = 8\nk >>= 2\n"
+            "l = 1\nl <<= 2\n"
+        )
+        path = _make_file(tmp_path, "widget.py", code)
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        local_violations = [i for i in result.issues if "no-local-augmented-mutation" in i]
+        assert len(local_violations) >= 12
+
+    def test_no_local_augmented_mutation_attribute_pass(self, tmp_path, full_semgrep_rules):
+        """obj.attr += val should NOT trigger no-local-augmented-mutation."""
+        path = _make_file(tmp_path, "widget.py", "class C:\n    x = 0\nc = C()\nc.x += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-local-augmented-mutation" in i for i in (result.issues or []))
+
+    def test_no_local_augmented_mutation_subscript_pass(self, tmp_path, full_semgrep_rules):
+        """obj[key] += val should NOT trigger no-local-augmented-mutation."""
+        path = _make_file(tmp_path, "widget.py", "d = {'a': 1}\nd['a'] += 1\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-local-augmented-mutation" in i for i in (result.issues or []))
+
+    # --- no-none-default-param ---
+    def test_no_none_default_param_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x=None):\n    return x\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-none-default-param" in i for i in result.issues)
+
+    def test_no_none_default_param_multiple_params_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x, y=None, z=None):\n    return x\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-none-default-param" in i for i in result.issues)
+
+    def test_no_none_default_param_non_none_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x=0, y=''):\n    return x\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-none-default-param" in i for i in (result.issues or []))
+
+    def test_no_none_default_param_assignment_outside_func_pass(self, tmp_path, full_semgrep_rules):
+        """x = None outside function parameters should NOT trigger this rule."""
+        path = _make_file(tmp_path, "widget.py", "x = None\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-none-default-param" in i for i in (result.issues or []))
+
+    # --- no-optional-none ---
+    def test_no_optional_none_optional_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from typing import Optional\ndef f(x: Optional[str]):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-optional-none" in i for i in result.issues)
+
+    def test_no_optional_none_pipe_none_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x: str | None):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-optional-none" in i for i in result.issues)
+
+    def test_no_optional_none_none_pipe_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x: None | str):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-optional-none" in i for i in result.issues)
+
+    def test_no_optional_none_union_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from typing import Union\ndef f(x: Union[str, None]):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-optional-none" in i for i in result.issues)
+
+    def test_no_optional_none_union_reversed_fail(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from typing import Union\ndef f(x: Union[None, str]):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert any("no-optional-none" in i for i in result.issues)
+
+    def test_no_optional_none_clean_type_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "def f(x: str):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-optional-none" in i for i in (result.issues or []))
+
+    def test_no_optional_none_union_without_none_pass(self, tmp_path, full_semgrep_rules):
+        path = _make_file(tmp_path, "widget.py", "from typing import Union\ndef f(x: Union[str, int]):\n    pass\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=full_semgrep_rules)
+        result = gate.evaluate(ctx)
+        assert not any("no-optional-none" in i for i in (result.issues or []))
+
 
 @needs_sg
 class TestLoopMutationRule:
