@@ -8,3 +8,5 @@ venv/
 .dolt/
 *.db
 .beads-credential-key
+.claude/audit/
+.claude/state/
