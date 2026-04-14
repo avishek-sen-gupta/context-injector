@@ -131,6 +131,8 @@ Rules are loaded from `scripts/lint/rules/*.yml`. The current rule set enforces 
 | `no-print` | `print()` — use logging |
 | `no-relative-import` | `from . import` — use absolute imports |
 | `no-static-method` | `@staticmethod` — use module-level functions |
+| `no-deep-nesting` | Any `for`/`if` nested inside another `for`/`if` (depth 2+) — use comprehensions, `itertools`, or extract a helper. Stops at function boundaries so nested `def`s don't false-positive. |
+| `no-loop-mutation` | Any mutation call inside a `for` body — append, extend, insert, pop, remove, add, discard, clear, update, setdefault, subscript assignment, `del`, augmented assignment. Use comprehensions, `reduce`, or functional patterns. Stops at function boundaries. |
 
 Rules are project-local (`scripts/lint/`) by default; falls back to the plugin's installed copy via `config.json`.
 

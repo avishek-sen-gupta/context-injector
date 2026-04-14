@@ -349,3 +349,226 @@ class TestLintGateWithSg:
         result = gate.evaluate(ctx)
         assert result.verdict == GateVerdict.FAIL
         assert len(result.issues) >= 3
+
+
+@pytest.fixture
+def nesting_rules_dir(tmp_path):
+    """Create a rules directory with the no-deep-nesting rule."""
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    import shutil as _shutil
+    src = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                       "scripts", "lint", "rules", "no-deep-nesting.yml")
+    _shutil.copy(src, rules / "no-deep-nesting.yml")
+    sgconfig = tmp_path / "sgconfig.yml"
+    sgconfig.write_text("ruleDirs:\n  - rules\n")
+    return str(tmp_path)
+
+
+@pytest.fixture
+def loop_mutation_rules_dir(tmp_path):
+    """Create a rules directory with the no-loop-mutation rule."""
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    import shutil as _shutil
+    src = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                       "scripts", "lint", "rules", "no-loop-mutation.yml")
+    _shutil.copy(src, rules / "no-loop-mutation.yml")
+    sgconfig = tmp_path / "sgconfig.yml"
+    sgconfig.write_text("ruleDirs:\n  - rules\n")
+    return str(tmp_path)
+
+
+@needs_sg
+class TestDeepNestingRule:
+    """Tests for the no-deep-nesting ast-grep rule."""
+
+    def test_for_in_for_fails(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(matrix):\n"
+            "    for row in matrix:\n"
+            "        for cell in row:\n"
+            "            process(cell)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-deep-nesting" in i for i in result.issues)
+
+    def test_if_in_for_fails(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    for x in items:\n"
+            "        if x > 0:\n"
+            "            process(x)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-deep-nesting" in i for i in result.issues)
+
+    def test_for_in_if_fails(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items, flag):\n"
+            "    if flag:\n"
+            "        for x in items:\n"
+            "            process(x)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-deep-nesting" in i for i in result.issues)
+
+    def test_if_in_if_fails(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(x, y):\n"
+            "    if x > 0:\n"
+            "        if y > 0:\n"
+            "            process(x, y)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-deep-nesting" in i for i in result.issues)
+
+    def test_triple_nesting_fails(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(cube):\n"
+            "    for plane in cube:\n"
+            "        for row in plane:\n"
+            "            for cell in row:\n"
+            "                process(cell)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_flat_for_passes(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    for x in items:\n"
+            "        process(x)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    def test_flat_if_passes(self, tmp_path, nesting_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(x):\n"
+            "    if x > 0:\n"
+            "        return x\n"
+            "    return 0\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    def test_for_in_nested_function_passes(self, tmp_path, nesting_rules_dir):
+        """A for inside a nested function def is not real nesting."""
+        path = _make_file(tmp_path, "widget.py",
+            "def outer(items):\n"
+            "    for x in items:\n"
+            "        def inner(ys):\n"
+            "            for y in ys:\n"
+            "                process(y)\n"
+            "        inner(x)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=nesting_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+
+@needs_sg
+class TestLoopMutationRule:
+    """Tests for the no-loop-mutation ast-grep rule."""
+
+    def test_append_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    result = []\n"
+            "    for x in items:\n"
+            "        result.append(x)\n"
+            "    return result\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+        assert any("no-loop-mutation" in i for i in result.issues)
+
+    def test_extend_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(lists):\n"
+            "    result = []\n"
+            "    for lst in lists:\n"
+            "        result.extend(lst)\n"
+            "    return result\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_subscript_assign_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(d, keys, val):\n"
+            "    for k in keys:\n"
+            "        d[k] = val\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_augmented_assign_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    total = 0\n"
+            "    for x in items:\n"
+            "        total += x\n"
+            "    return total\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_del_subscript_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(d, keys):\n"
+            "    for k in keys:\n"
+            "        del d[k]\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_set_add_in_for_fails(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    seen = set()\n"
+            "    for x in items:\n"
+            "        seen.add(x)\n"
+            "    return seen\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.FAIL
+
+    def test_no_mutation_in_for_passes(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    for x in items:\n"
+            "        print(x)\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
+
+    def test_mutation_outside_for_passes(self, tmp_path, loop_mutation_rules_dir):
+        path = _make_file(tmp_path, "widget.py",
+            "def f(items):\n"
+            "    result = []\n"
+            "    result.append(42)\n"
+            "    return result\n")
+        ctx = _make_context(str(tmp_path), [path])
+        gate = LintGate(rules_dir=loop_mutation_rules_dir)
+        result = gate.evaluate(ctx)
+        assert result.verdict == GateVerdict.PASS
