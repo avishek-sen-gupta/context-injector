@@ -1,0 +1,3 @@
+[submodule "scripts/lint"]
+	path = scripts/lint
+	url = https://github.com/avishek-sen-gupta/python-fp-lint.git
