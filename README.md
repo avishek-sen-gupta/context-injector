@@ -76,9 +76,79 @@ Each gate returns a verdict:
 
 **Built-in gates:**
 
-- **TestQualityGate** — exit guard on `writing_tests` in the TDD machine. Prevents leaving the test-writing phase until tests are structurally valid. Uses AST analysis to detect invalid tests (no assertions, `assert True`, `pytest.skip`) and weak patterns (none-only, membership-only, type-only checks).
-- **LintGate** — runs on entry to the `linting` state. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
-- **ReassignmentGate** — runs on entry to the `linting` state alongside LintGate. Uses [beniget](https://github.com/serge-sans-paille/beniget) def-use chain analysis to detect variables or parameters assigned more than once within the same scope. Catches rebinding that structural pattern matching cannot detect.
+#### TestQualityGate
+
+Exit guard on `writing_tests` in the TDD machine. Prevents leaving the test-writing phase until tests are structurally valid. Uses Python AST analysis to inspect every `test_*` function in recently touched test files.
+
+**Hard violations** (verdict: `FAIL` — blocks the transition):
+
+| Rule | What it catches |
+|---|---|
+| `no_assertions` | Test function contains no `assert` statements and no `pytest.raises` context manager |
+| `trivial_assertion` | `assert True`, `assert 1`, or any `assert <literal>` that can never fail |
+| `skip_abuse` | `pytest.skip()` call inside a test body — tests must not skip themselves |
+| `xfail_abuse` | `@pytest.mark.xfail` decorator or `pytest.xfail()` call — expected failures are not real tests |
+
+**Soft violations** (verdict: `REVIEW` — agent must self-review, then retry):
+
+| Rule | What it catches |
+|---|---|
+| `none_only` | Every assertion in the function only checks `is None` / `is not None` — no value comparisons |
+| `membership_only` | Every assertion only checks `in` / `not in` without verifying actual values |
+| `type_only` | Every assertion only checks `isinstance()` without verifying actual values |
+| `import_overlap` | Same production function called on both sides of `==` (e.g. `assert f(x) == f(x)`) — test proves nothing |
+
+#### LintGate
+
+Runs on entry to the `linting` state. Executes [ast-grep](https://ast-grep.github.io/) rules from `scripts/lint/rules/` against recently touched Python files. Blocks the transition if any violations are found. Gracefully passes if `ast-grep` (`sg`) is not installed.
+
+Rules are loaded from `scripts/lint/rules/*.yml`. The current rule set enforces immutable-style Python:
+
+| Rule | What it blocks |
+|---|---|
+| `no-list-append` | `list.append()` — build lists via comprehensions or `[*old, new]` |
+| `no-list-extend` | `list.extend()` — use `[*a, *b]` |
+| `no-list-insert` | `list.insert()` — use slicing or rebuild |
+| `no-list-pop` | `list.pop()` — destructure or slice instead |
+| `no-list-remove` | `list.remove()` — filter instead |
+| `no-dict-update` | `dict.update()` — use `{**old, **new}` |
+| `no-dict-clear` | `dict.clear()` — rebind to `{}` |
+| `no-dict-setdefault` | `dict.setdefault()` — use `{**old, key: val}` or comprehension |
+| `no-set-add` | `set.add()` — use `{*old, new}` |
+| `no-set-discard` | `set.discard()` — use set difference |
+| `no-setitem-call` | `obj.__setitem__()` — use spread or comprehension |
+| `no-subscript-mutation` | `d[k] = v` — use spread or comprehension |
+| `no-subscript-del` | `del d[k]` — filter or rebuild |
+| `no-subscript-tuple-mutation` | Tuple subscript assignment (e.g. `t[0] = v`) |
+| `no-subscript-augmented-mutation` | `d[k] += v` — augmented assignment via subscript |
+| `no-attribute-augmented-mutation` | `obj.attr += v` — augmented assignment via attribute |
+| `no-local-augmented-mutation` | `x += v` — augmented assignment on local variables |
+| `no-is-none` | `x is None` — use explicit comparison patterns |
+| `no-is-not-none` | `x is not None` — use explicit comparison patterns |
+| `no-none-default-param` | `def f(x=None)` — use sentinel or overload |
+| `no-bare-except` | `except:` without an exception type |
+| `no-except-exception` | `except Exception:` — catch specific exceptions |
+| `no-print` | `print()` — use logging |
+| `no-relative-import` | `from . import` — use absolute imports |
+| `no-static-method` | `@staticmethod` — use module-level functions |
+
+Rules are project-local (`scripts/lint/`) by default; falls back to the plugin's installed copy via `config.json`.
+
+#### ReassignmentGate
+
+Runs on entry to the `linting` state alongside LintGate. Uses [beniget](https://github.com/serge-sans-paille/beniget) def-use chain analysis to detect variables or parameters assigned more than once within the same scope. Catches rebinding that structural pattern matching (ast-grep) cannot detect.
+
+**What it flags:** Any name that has more than one definition within the same scope (function, class, or module). For example:
+
+```python
+# Flagged: 'result' defined twice in the same function
+def process(items):
+    result = compute(items)
+    result = transform(result)  # ← reassignment violation
+    return result
+```
+
+Imports, function definitions, and class definitions are excluded — only value-binding assignments are checked.
 
 Machines register gates via `GUARDS`, `EXIT_GUARDS`, `GATE_SOFTNESS`, and `CHECK_STATES`:
 
