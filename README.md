@@ -344,6 +344,23 @@ When multiple modes are active they don't conflict — each operates on its own 
 - [Semgrep](https://semgrep.dev/) — required for LintGate (26 rules); `pip install semgrep`
 - [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for 2 LintGate rules (`no-deep-nesting`, `no-loop-mutation`); gate passes silently if not installed
 
+## Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management during development.
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install all dependencies (runtime + dev) into .venv/
+uv sync --dev
+
+# Run tests
+uv run pytest tests/ -v
+```
+
+The development environment (`.venv/` managed by uv) is independent of the hook deployment. Contributors use `uv sync --dev` for local testing; end users run `install-governor.sh` which checks that runtime deps are available in the system Python.
+
 ## Installation
 
 ### Governor
