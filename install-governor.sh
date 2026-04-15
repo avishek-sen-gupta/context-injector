@@ -29,9 +29,8 @@ if ! python3 -c "import beniget" 2>/dev/null; then
   echo "Warning: beniget not found (needed by python-fp-lint ReassignmentGate). Install with: pip3 install beniget>=0.5.0" >&2
 fi
 
-if ! command -v semgrep > /dev/null 2>&1; then
-  echo "Error: semgrep is required but not found. Install with: pip install semgrep" >&2
-  exit 1
+if ! command -v ruff > /dev/null 2>&1; then
+  echo "Warning: ruff not found (used by python-fp-lint LintGate). Install with: pip3 install ruff" >&2
 fi
 
 if [ ! -d "$PROJECT_DIR/.claude" ]; then
@@ -96,15 +95,9 @@ fi
 
 LINT_DIR="$HOME/.claude/plugins/context-injector/scripts/lint"
 mkdir -p "$LINT_DIR/python_fp_lint/rules"
-cp "$LINT_SRC/python_fp_lint/semgrep-rules.yml" "$LINT_DIR/python_fp_lint/"
 cp "$LINT_SRC/python_fp_lint/sgconfig.yml" "$LINT_DIR/python_fp_lint/"
 cp "$LINT_SRC/python_fp_lint/rules/"*.yml "$LINT_DIR/python_fp_lint/rules/"
 cp "$LINT_SRC/python_fp_lint/"*.py "$LINT_DIR/python_fp_lint/"
-# Also copy to legacy paths for config.json compatibility
-cp "$LINT_SRC/python_fp_lint/semgrep-rules.yml" "$LINT_DIR/"
-cp "$LINT_SRC/python_fp_lint/sgconfig.yml" "$LINT_DIR/"
-mkdir -p "$LINT_DIR/rules"
-cp "$LINT_SRC/python_fp_lint/rules/"*.yml "$LINT_DIR/rules/"
 
 # --- write plugin config ---
 echo "Writing plugin config..."

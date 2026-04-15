@@ -11,7 +11,7 @@ _lint_pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 if _lint_pkg not in sys.path:
     sys.path.insert(0, _lint_pkg)
 
-from python_fp_lint import ReassignmentGate as _ReassignmentGate
+from python_fp_lint.reassignment_gate import ReassignmentGate as _ReassignmentGate
 
 
 class ReassignmentGate(Gate):

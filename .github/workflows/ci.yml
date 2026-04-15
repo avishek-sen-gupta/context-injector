@@ -21,7 +21,7 @@ jobs:
 
       - name: Install lint tools
         run: |
-          uv pip install semgrep
+          uv pip install ruff
           npm install -g @ast-grep/cli
 
       - name: Add venv to PATH
