@@ -5,7 +5,9 @@
 # Receives Claude Code hook JSON on stdin:
 #   {"tool_name": "Bash", "tool_input": {"command": "bd create ..."}}
 #
-# Outputs {"continue": false, "stopReason": "..."} to block, exits 0 silently to allow.
+# Outputs {"continue": false, "stopReason": "..."} to stdout and exits 2 to block;
+# also writes the reason to stderr so Claude Code surfaces it directly to the LLM.
+# Exits 0 silently to allow.
 
 set -euo pipefail
 
@@ -36,10 +38,10 @@ text_to_check="$(printf '%s' "$cmd" | sed 's/^\s*bd\s\+[a-z ]*\s*//')"
 
 if printf '%s' "$text_to_check" | grep -qE "$pattern"; then
     matched="$(printf '%s' "$text_to_check" | grep -oE "$pattern" | head -1)"
-    printf '%s' "$(jq -n \
-        --arg reason "Blocked: Beads command contains sensitive terminology matching pattern \"$matched\". Remove it before retrying." \
-        '{"continue": false, "stopReason": $reason}')"
-    exit 0
+    reason="Blocked: Beads command contains sensitive terminology matching pattern \"$matched\". Remove it before retrying."
+    printf '%s' "$(jq -n --arg reason "$reason" '{"continue": false, "stopReason": $reason}')"
+    echo "$reason" >&2
+    exit 2
 fi
 
 exit 0
