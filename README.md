@@ -11,6 +11,8 @@ Three modes, from lightweight to full enforcement:
 2. **Context Injection** (`/ctx`) — keyword-based context injection without enforcement, for projects that want guidance without guardrails
 3. **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
 
+Plus a standalone **Git Terminology Guard** — a pre-commit hook that prevents forbidden terms from entering source history, plus a history scanner for auditing past commits.
+
 All modes are independent and can be installed/enabled simultaneously.
 
 ## Governor
@@ -336,6 +338,7 @@ All three modes use **separate lock files / hooks** and can be enabled independe
 | Context Injection | `/ctx on\|off` | `UserPromptSubmit` |
 | Governor | `/governor tdd\|off\|status` | `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact` |
 | Beads Terminology Guard | `install-bd-guard.sh` / `uninstall-bd-guard.sh` | `PreToolUse` |
+| Git Terminology Guard | `install-terminology-guard.sh` / `uninstall-terminology-guard.sh` | git pre-commit hook |
 
 When multiple modes are active they don't conflict — each operates on its own hook events and lock files.
 
@@ -411,6 +414,31 @@ Installs:
 Blocklist: `~/.config/git/blocklist.txt` (one term per line)
 
 Uninstall: `/path/to/context-injector/uninstall-bd-guard.sh`
+
+### Git Terminology Guard
+
+Prevents forbidden terms from entering git history via a pre-commit hook. Uses the same blocklist as the Beads guard.
+
+```bash
+cd /path/to/your/project
+/path/to/context-injector/install-terminology-guard.sh
+```
+
+Installs:
+- `check-terminology`, `scan-history`, `lib-terminology.sh` → `~/.claude/plugins/context-injector/gates/terminology/`
+- Wires `check-terminology` into `.git/hooks/pre-commit` of the current project (idempotent)
+
+**Blocklist:** `~/.config/git/blocklist.txt` — one regex pattern per line (comments with `#` ignored)  
+**Excludelist:** `~/.config/git/blocklist-exclude.txt` — glob patterns for files to skip (optional)
+
+**Scanning history:**
+```bash
+~/.claude/plugins/context-injector/gates/terminology/scan-history
+```
+
+Scans the full git history (file contents + commit messages) for forbidden terms and prints a formatted report.
+
+Uninstall: `/path/to/context-injector/uninstall-terminology-guard.sh`
 
 ### All three
 
