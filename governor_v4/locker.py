@@ -1,5 +1,6 @@
 """Evidence locker: tamper-proof store of captured tool outputs."""
 
+import copy
 import hashlib
 import json
 import os
@@ -61,8 +62,12 @@ class EvidenceLocker:
         return key
 
     def retrieve(self, key: str) -> dict | None:
-        """Retrieve an evidence entry by key. Returns None if not found."""
-        return self._entries.get(key)
+        """Retrieve an evidence entry by key. Returns None if not found.
+
+        Returns a deep copy so callers cannot mutate stored evidence.
+        """
+        entry = self._entries.get(key)
+        return copy.deepcopy(entry) if entry is not None else None
 
     def keys(self) -> list[str]:
         """List all stored evidence keys."""
