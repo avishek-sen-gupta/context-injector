@@ -144,15 +144,20 @@ class GovernorV4:
 
             # 3. Run gate
             gate_cls = GATE_REGISTRY.get(edge.evidence_contract.gate)
-            if gate_cls:
-                gate = gate_cls()
-                result = gate.validate([evidence_key], self._locker)
-                if result.verdict == GateVerdict.FAIL:
-                    return {
-                        "action": "deny",
-                        "current_phase": self._current_phase,
-                        "message": result.message or f"Gate {edge.evidence_contract.gate} denied transition",
-                    }
+            if not gate_cls:
+                return {
+                    "action": "deny",
+                    "current_phase": self._current_phase,
+                    "message": f"Gate {edge.evidence_contract.gate} not found in registry",
+                }
+            gate = gate_cls()
+            result = gate.validate([evidence_key], self._locker)
+            if result.verdict == GateVerdict.FAIL:
+                return {
+                    "action": "deny",
+                    "current_phase": self._current_phase,
+                    "message": result.message or f"Gate {edge.evidence_contract.gate} denied transition",
+                }
 
         # 4. Transition
         from_state = self._current_phase
