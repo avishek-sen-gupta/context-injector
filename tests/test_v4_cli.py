@@ -101,3 +101,42 @@ class TestLoadEngine:
         # Reload — should restore
         engine2 = load_engine(session_id)
         assert engine2.current_phase == "writing_tests"
+
+
+class TestMainDispatch:
+    def test_no_args_prints_usage(self):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "governor_v4"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "usage" in result.stderr.lower()
+
+    def test_unknown_subcommand_fails(self):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "governor_v4", "bogus"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+
+    @pytest.mark.skip(reason="cmd_prompt not yet implemented (Task 6)")
+    def test_prompt_subcommand_exists(self):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "governor_v4", "prompt", "--session", "test"],
+            input='{"prompt": "hello"}',
+            capture_output=True,
+            text=True,
+        )
+        # Should exit 0 — no /governor command in "hello"
+        assert result.returncode == 0
