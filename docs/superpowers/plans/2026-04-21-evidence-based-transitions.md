@@ -106,11 +106,17 @@ rm -f machines/tdd.json
 __version__ = "4.0.0"
 ```
 
-Update `pyproject.toml` packages list: replace `governor_v3` with `governor_v4`:
+Update `pyproject.toml`: replace `governor_v3` with `governor_v4` in packages list, and remove LangGraph dependencies (unused):
 
 ```toml
 [tool.setuptools]
 packages = ["governor", "governor_v4", "gates", "hooks", "machines"]
+```
+
+Remove from dependencies:
+```toml
+    "langgraph>=0.3.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
