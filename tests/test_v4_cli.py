@@ -140,3 +140,38 @@ class TestMainDispatch:
         )
         # Should exit 0 — no /governor command in "hello"
         assert result.returncode == 0
+
+
+class TestCmdInit:
+    def test_init_restore_active_session(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_init import run_init
+        output = run_init("s1")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "writing_tests" in ctx
+
+    def test_init_restore_inactive_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        from governor_v4.cmd_init import run_init
+        output = run_init("nonexistent")
+        assert output is None
+
+    def test_init_restore_includes_phase_and_blocked(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_init import run_init
+        output = run_init("s1")
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "blocked" in ctx.lower() or "Write" in ctx
