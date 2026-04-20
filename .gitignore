@@ -10,3 +10,5 @@ venv/
 .beads-credential-key
 .claude/audit/
 .claude/state/
+.serena/
+*.egg-info/
