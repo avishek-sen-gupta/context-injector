@@ -1,5 +1,8 @@
 """GovernorV3 engine: evaluate() and trigger() methods."""
 
+import json
+import os
+
 from governor_v3.config import MachineConfig, NodeConfig, EdgeConfig, GateConfig
 from governor_v3.primitives import check_tool_allowed, GATE_REGISTRY
 from gates.base import GateContext, GateVerdict
@@ -13,11 +16,13 @@ class GovernorV3:
         config: MachineConfig,
         project_root: str = ".",
         session_id: str = "default",
+        state_dir: str | None = None,
     ):
         self.config = config
         self.project_root = project_root
         self.session_id = session_id
-        self._current_phase = config.find_initial_node().name
+        self._state_dir = state_dir
+        self._current_phase = self._load_phase() or config.find_initial_node().name
 
     @property
     def current_phase(self) -> str:
@@ -29,6 +34,27 @@ class GovernorV3:
             if node.name == target:
                 return node
         raise ValueError(f"Node {target} not found in {self.config.name}")
+
+    def _state_file(self) -> str | None:
+        if not self._state_dir:
+            return None
+        return os.path.join(self._state_dir, f"{self.session_id}.json")
+
+    def _load_phase(self) -> str | None:
+        path = self._state_file()
+        if not path or not os.path.exists(path):
+            return None
+        with open(path) as f:
+            data = json.load(f)
+        return data.get("current_phase")
+
+    def _save_phase(self):
+        path = self._state_file()
+        if not path:
+            return
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else path, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"current_phase": self._current_phase, "machine": self.config.name}, f)
 
     def evaluate(self, tool_name: str, tool_input: dict) -> dict:
         """Evaluate a tool call against current state. Returns action dict."""
@@ -75,6 +101,9 @@ class GovernorV3:
 
         # Auto-advance loop
         self._auto_advance()
+
+        # Save state to file if state_dir is set
+        self._save_phase()
 
         return {
             "from_state": from_state,
