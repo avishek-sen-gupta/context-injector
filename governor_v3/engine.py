@@ -52,7 +52,8 @@ class GovernorV3:
         path = self._state_file()
         if not path:
             return
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else path, exist_ok=True)
+        dir_path = os.path.dirname(path) or "."
+        os.makedirs(dir_path, exist_ok=True)
         with open(path, "w") as f:
             json.dump({"current_phase": self._current_phase, "machine": self.config.name}, f)
 
