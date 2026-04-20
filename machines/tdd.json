@@ -1,0 +1,68 @@
+{
+    "name": "tdd",
+    "description": "Test-Driven Development cycle",
+    "nodes": [
+        {
+            "name": "writing_tests",
+            "initial": true,
+            "blocked_tools": ["Write", "Edit"],
+            "allowed_exceptions": ["Write(test_*)", "Edit(test_*)"],
+            "action": "inject_context",
+            "action_params": {"patterns": ["conditional/testing-patterns.md"]}
+        },
+        {
+            "name": "red",
+            "auto_transition": "start_fixing",
+            "blocked_tools": ["Write", "Edit"]
+        },
+        {
+            "name": "fixing_tests",
+            "blocked_tools": [],
+            "action": "inject_context",
+            "action_params": {"patterns": ["core/*"]}
+        },
+        {
+            "name": "green",
+            "auto_transition": "start_linting",
+            "blocked_tools": ["Write", "Edit"]
+        },
+        {
+            "name": "linting",
+            "blocked_tools": ["Write", "Edit"]
+        },
+        {
+            "name": "fixing_lint",
+            "blocked_tools": []
+        }
+    ],
+    "edges": [
+        {"from": "writing_tests", "to": "red", "trigger": "pytest_fail"},
+        {"from": "writing_tests", "to": "green", "trigger": "pytest_pass"},
+        {"from": "fixing_tests", "to": "red", "trigger": "pytest_fail"},
+        {"from": "fixing_tests", "to": "green", "trigger": "pytest_pass"},
+        {"from": "fixing_tests", "to": "writing_tests", "trigger": "add_tests"},
+        {"from": "red", "to": "fixing_tests", "trigger": "start_fixing"},
+        {"from": "green", "to": "linting", "trigger": "start_linting"},
+        {"from": "linting", "to": "writing_tests", "trigger": "lint_pass"},
+        {"from": "linting", "to": "fixing_lint", "trigger": "lint_fail"},
+        {"from": "fixing_lint", "to": "writing_tests", "trigger": "lint_pass"},
+        {"from": "fixing_lint", "to": "fixing_lint", "trigger": "lint_fail"}
+    ],
+    "gates": [
+        {
+            "name": "test_quality",
+            "applies_to": ["writing_tests"],
+            "trigger": "on_exit",
+            "gate_names": ["test_quality"],
+            "policy": "strict"
+        },
+        {
+            "name": "lint_check",
+            "applies_to": ["linting"],
+            "trigger": "on_enter",
+            "gate_names": ["lint", "reassignment"],
+            "policy": "strict",
+            "routes": {"pass": "lint_pass", "fail": "lint_fail"}
+        }
+    ]
+}
