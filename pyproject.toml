@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "context-injector"
 version = "2.0.0"
@@ -10,6 +14,9 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+packages = ["governor", "governor_v4", "gates", "hooks", "machines"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
