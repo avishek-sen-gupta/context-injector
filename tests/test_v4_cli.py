@@ -175,3 +175,51 @@ class TestCmdInit:
         parsed = json.loads(output)
         ctx = parsed["hookSpecificOutput"]["additionalContext"]
         assert "blocked" in ctx.lower() or "Write" in ctx
+
+
+class TestCmdEvaluate:
+    def test_evaluate_allow(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_evaluate import run_evaluate
+        hook_input = {"tool_name": "Read", "tool_input": {"file_path": "main.py"}}
+        output = run_evaluate("s1", hook_input)
+        assert output is None  # allow = no output
+
+    def test_evaluate_block(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_evaluate import run_evaluate
+        hook_input = {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
+        output = run_evaluate("s1", hook_input)
+        assert output is not None
+        parsed = json.loads(output)
+        assert parsed["decision"] == "block"
+        assert "blocked" in parsed["reason"].lower()
+
+    def test_evaluate_exception_allows(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_evaluate import run_evaluate
+        hook_input = {"tool_name": "Write", "tool_input": {"file_path": "test_foo.py"}}
+        output = run_evaluate("s1", hook_input)
+        assert output is None  # exception allows it
+
+    def test_evaluate_inactive_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        from governor_v4.cmd_evaluate import run_evaluate
+        hook_input = {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
+        output = run_evaluate("nonexistent", hook_input)
+        assert output is None  # inactive = pass-through
