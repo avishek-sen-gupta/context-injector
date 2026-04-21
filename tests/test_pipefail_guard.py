@@ -21,8 +21,9 @@ class TestPipefailGuard:
         result = run_hook("Bash", {"command": "pytest tests/"})
         assert result.returncode == 0
         parsed = json.loads(result.stdout)
-        assert parsed["decision"] == "approve"
-        assert parsed["tool_input"]["command"] == "set -o pipefail; pytest tests/"
+        hook_out = parsed["hookSpecificOutput"]
+        assert hook_out["permissionDecision"] == "allow"
+        assert hook_out["updatedInput"]["command"] == "set -o pipefail; pytest tests/"
 
     def test_skips_non_bash_tools(self):
         result = run_hook("Write", {"file_path": "x.py"})
@@ -41,4 +42,11 @@ class TestPipefailGuard:
         cmd = "git status && echo done"
         result = run_hook("Bash", {"command": cmd})
         parsed = json.loads(result.stdout)
-        assert parsed["tool_input"]["command"].endswith(cmd)
+        assert parsed["hookSpecificOutput"]["updatedInput"]["command"].endswith(cmd)
+
+    def test_handles_quotes_in_command(self):
+        cmd = 'echo "got $?"'
+        result = run_hook("Bash", {"command": cmd})
+        assert result.returncode == 0
+        parsed = json.loads(result.stdout)  # must be valid JSON
+        assert parsed["hookSpecificOutput"]["updatedInput"]["command"] == f"set -o pipefail; {cmd}"

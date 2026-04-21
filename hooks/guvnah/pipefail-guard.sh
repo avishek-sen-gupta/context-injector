@@ -14,11 +14,16 @@ case "$COMMAND" in
   *"set -o pipefail"*) exit 0 ;;
 esac
 
-cat <<JSON
-{
-  "decision": "approve",
-  "tool_input": {
-    "command": "set -o pipefail; $COMMAND"
-  }
-}
-JSON
+printf '%s' "set -o pipefail; $COMMAND" | python3 -c "
+import sys, json
+cmd = sys.stdin.read()
+print(json.dumps({
+    'hookSpecificOutput': {
+        'hookEventName': 'PreToolUse',
+        'permissionDecision': 'allow',
+        'updatedInput': {
+            'command': cmd
+        }
+    }
+}))
+"
