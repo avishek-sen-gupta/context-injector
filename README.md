@@ -7,7 +7,7 @@ A collection of Claude Code hooks and tools for enforcing discipline during agen
 
 **Tools:**
 
-- **Pipefail Guard** — a PreToolUse hook that prepends `set -o pipefail;` to every Bash command, ensuring pipeline failures are caught
+- **Pipefail Guard** — a PreToolUse hook that prepends `set -o pipefail;` to every Bash command, ensuring that exit codes of all Bash invocations are surfaced correctly (even when they are tailed, etc.)
 - **Governor** (`/governor`) — an evidence-based state machine that enforces workflow phases, blocks disallowed tools, captures tool output as evidence, and validates transitions via gates
 - **Context Injection** (`/ctx`) — keyword-based context injection that adds relevant guidance files to every prompt based on what you're working on
 - **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
