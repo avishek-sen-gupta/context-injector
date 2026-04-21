@@ -34,7 +34,7 @@ flowchart TD
         B4["✅ Bash('pytest') — captured as evidence"]
     end
 
-    B --> C["Tests fail → evidence captured\nAgent requests transition\nGovernor checks evidence"]
+    B --> C["Tests fail — evidence captured<br/>Agent requests transition<br/>Governor checks evidence"]
     C --> D
 
     subgraph D["Governor: phase = fixing_tests"]
@@ -48,19 +48,19 @@ flowchart TD
 The built-in TDD machine enforces red-green-refactor with four phases:
 
 ```mermaid
-stateDiagram-v2
-    writing_tests: writing_tests\n(BLOCKED: Write, Edit\nEXCEPT test_*)
-    fixing_tests: fixing_tests\n(all tools allowed)
-    refactoring: refactoring\n(all tools allowed)
-    fixing_lint: fixing_lint\n(all tools allowed)
+flowchart TD
+    WT["<b>writing_tests</b><br/>BLOCKED: Write, Edit<br/>EXCEPT test files"]
+    FT["<b>fixing_tests</b><br/>all tools allowed"]
+    RF["<b>refactoring</b><br/>all tools allowed"]
+    FL["<b>fixing_lint</b><br/>all tools allowed"]
 
-    writing_tests --> fixing_tests : pytest_fail_gate
-    fixing_tests --> writing_tests : (free, no evidence)
-    fixing_tests --> refactoring : pytest_pass_gate
-    refactoring --> writing_tests : pytest_pass_gate
-    refactoring --> fixing_tests : pytest_fail_gate
-    refactoring --> fixing_lint : lint_fail_gate
-    fixing_lint --> refactoring : lint_pass_gate
+    WT -- pytest_fail_gate --> FT
+    FT -- "free, no evidence" --> WT
+    FT -- pytest_pass_gate --> RF
+    RF -- pytest_pass_gate --> WT
+    RF -- pytest_fail_gate --> FT
+    RF -- lint_fail_gate --> FL
+    FL -- lint_pass_gate --> RF
 ```
 
 Each arrow is a **transition** that requires evidence. The agent must actually run pytest or the linter, and the governor verifies the captured output before allowing the move.
@@ -83,9 +83,9 @@ Unlike traditional state machines where transitions fire on events, the governor
 
 ```mermaid
 flowchart TD
-    A["1. Agent does the work\nBash('pytest tests/ -v')"] --> B["2. Governor captures output\nPostToolUse hook stores result\nas evidence (evt_abc123)"]
-    B --> C["3. Agent requests transition\n/governor transition fixing_tests evt_abc123"]
-    C --> D{"4. Governor validates\nIs evt_abc123 of type pytest_output?"}
+    A["1. Agent does the work<br/>Bash('pytest tests/ -v')"] --> B["2. Governor captures output<br/>PostToolUse hook stores result<br/>as evidence (evt_abc123)"]
+    B --> C["3. Agent requests transition<br/>/governor transition fixing_tests evt_abc123"]
+    C --> D{"4. Governor validates<br/>Is evt_abc123 of type pytest_output?"}
     D -- Yes --> E["Transition allowed ✅"]
     D -- No --> F["Transition denied 🚫"]
 ```
