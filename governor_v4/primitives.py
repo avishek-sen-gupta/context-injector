@@ -1,6 +1,7 @@
 """Tool blocking and capture rule matching."""
 
 import fnmatch
+import os
 
 
 def check_tool_allowed(
@@ -12,6 +13,8 @@ def check_tool_allowed(
     """Check if a tool call is allowed given blocklist and exception patterns.
 
     Exception patterns use "ToolName(arg_glob)" syntax, e.g. "Write(test_*)".
+    Patterns are matched against both the full path and the basename,
+    so "Write(test_*)" matches "/abs/path/test_foo.py".
     """
     if not blocked:
         return True
@@ -21,10 +24,14 @@ def check_tool_allowed(
         return True
 
     if exceptions and tool_arg:
+        basename = os.path.basename(tool_arg)
         for exc in exceptions:
             if "(" in exc and exc.endswith(")"):
                 exc_name, exc_pattern = exc.rstrip(")").split("(", 1)
-                if exc_name == tool_name and fnmatch.fnmatch(tool_arg, exc_pattern):
+                if exc_name == tool_name and (
+                    fnmatch.fnmatch(tool_arg, exc_pattern)
+                    or fnmatch.fnmatch(basename, exc_pattern)
+                ):
                     return True
 
     return False
