@@ -25,76 +25,77 @@ Think of it as a traffic cop sitting between Claude and its tools:
 
 ```
   You: "Add a login feature using TDD"
-                    │
-                    ▼
-  ┌──────────────────────────────────┐
-  │  Governor: phase = writing_tests │
-  │                                  │
-  │  ✅ Write("test_login.py")       │  ← test file, allowed
-  │  🚫 Write("auth.py")            │  ← production file, BLOCKED
-  │  ✅ Read("auth.py")              │  ← reading is always fine
-  │  ✅ Bash("pytest")               │  ← captured as evidence
-  │                                  │
-  │  Tests fail → evidence captured  │
-  │  Agent requests transition       │
-  │  Governor checks evidence ✓     │
-  │                                  │
-  │  Governor: phase = fixing_tests  │
-  │                                  │
-  │  ✅ Write("auth.py")             │  ← now allowed
-  │  ✅ Write("test_login.py")       │  ← still allowed
-  └──────────────────────────────────┘
+                    |
+                    v
+  +------------------------------------------+
+  |  Governor: phase = writing_tests         |
+  |                                          |
+  |  OK  Write("test_login.py")    <- test file, allowed
+  |  NO  Write("auth.py")         <- production file, BLOCKED
+  |  OK  Read("auth.py")          <- reading is always fine
+  |  OK  Bash("pytest")           <- captured as evidence
+  |                                          |
+  |  Tests fail -> evidence captured         |
+  |  Agent requests transition               |
+  |  Governor checks evidence                |
+  |                                          |
+  |  Governor: phase = fixing_tests          |
+  |                                          |
+  |  OK  Write("auth.py")         <- now allowed
+  |  OK  Write("test_login.py")   <- still allowed
+  +------------------------------------------+
 ```
 
 ### The TDD cycle
 
-The built-in TDD machine enforces red-green-refactor:
+The built-in TDD machine enforces red-green-refactor with four phases:
 
 ```
-                    ┌─────────────────┐
-                    │  writing_tests  │ ← START
-                    │                 │
-                    │  🚫 Write/Edit  │
-                    │  ✅ test_* only │
-                    └────────┬────────┘
-                             │
-                     pytest fails (evidence)
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  fixing_tests   │
-                    │                 │
-                    │  ✅ all files   │
-                    └────────┬────────┘
-                             │
-                     pytest passes (evidence)
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  refactoring    │
-                    │                 │
-                    │  ✅ all files   │
-                    └────────┬────────┘
-                             │
-                      lint check runs
-                       ┌─────┴─────┐
-                       │           │
-                    passes      fails
-                       │           │
-                       ▼           ▼
-              back to          ┌─────────────────┐
-           writing_tests       │  fixing_lint    │
-                               │                 │
-                               │  ✅ all files   │
-                               └────────┬────────┘
-                                        │
-                                   lint passes
-                                        │
-                                        ▼
-                               back to refactoring
+  +------------------+         pytest_fail_gate         +------------------+
+  |  writing_tests   | ------------------------------> |  fixing_tests    |
+  |                  |                                  |                  |
+  |  BLOCKED:        | <-----------+  +--------------- |  all tools       |
+  |  Write, Edit     |  (free, no |  | pytest_pass     |  allowed         |
+  |  EXCEPT test_*   |  evidence) |  | _gate           |                  |
+  +------------------+            |  |                  +------------------+
+        ^                         |  v
+        |  pytest_pass_gate   +------------------+
+        +-------------------- |  refactoring     |
+                              |                  |
+                              |  all tools       |
+                              |  allowed         |
+                              +--------+---------+
+                                       |
+                        +--------------+--------------+
+                        | pytest_fail_gate            | lint_fail_gate
+                        v                             v
+                   fixing_tests              +------------------+
+                   (see above)               |  fixing_lint     |
+                                             |                  |
+                                             |  all tools       |
+                                             |  allowed         |
+                                             +--------+---------+
+                                                      |
+                                             lint_pass_gate
+                                                      |
+                                                      v
+                                                 refactoring
+                                                 (see above)
 ```
 
-Each box is a **phase**. Each arrow is a **transition** that requires evidence — the agent must actually run pytest or the linter, and the governor verifies the output before allowing the move.
+Each arrow is a **transition** that requires evidence. The agent must actually run pytest or the linter, and the governor verifies the captured output before allowing the move.
+
+**Full transition map:**
+
+| From | To | Required evidence | Gate |
+|---|---|---|---|
+| `writing_tests` | `fixing_tests` | `pytest_output` | `pytest_fail_gate` |
+| `fixing_tests` | `refactoring` | `pytest_output` | `pytest_pass_gate` |
+| `fixing_tests` | `writing_tests` | *(none)* | *(free)* |
+| `refactoring` | `writing_tests` | `pytest_output` | `pytest_pass_gate` |
+| `refactoring` | `fixing_tests` | `pytest_output` | `pytest_fail_gate` |
+| `refactoring` | `fixing_lint` | `lint_output` | `lint_fail_gate` |
+| `fixing_lint` | `refactoring` | `lint_output` | `lint_pass_gate` |
 
 ### How transitions work
 
@@ -102,18 +103,18 @@ Unlike traditional state machines where transitions fire on events, the governor
 
 ```
   1. Agent does the work         Bash("pytest tests/ -v")
-                                        │
+                                        |
   2. Governor captures output    PostToolUse hook stores result
                                  as evidence (evt_abc123)
-                                        │
+                                        |
   3. Agent requests transition   /governor transition fixing_tests evt_abc123
-                                        │
-  4. Governor validates          Does evt_abc123 contain failing tests?
-                                 Yes → transition allowed
-                                 No  → transition denied
+                                        |
+  4. Governor validates          Is evt_abc123 of type pytest_output?
+                                 Yes -> transition allowed
+                                 No  -> transition denied
 ```
 
-This means transitions are grounded in real tool output, not declarations. The agent can't just say "tests fail" — it has to run them, and the governor checks.
+Gates currently use **trust mode**: they verify the evidence key exists in the tamper-proof locker and its type matches what the transition requires (e.g., `pytest_output` for a pytest gate). Since the evidence locker can only be written to by the PostToolUse hook — not by the agent directly — this provides a chain of proof: the agent actually ran the tool, the output was captured, and the evidence type matches the transition contract.
 
 ### Commands
 
@@ -122,7 +123,7 @@ This means transitions are grounded in real tool output, not declarations. The a
 | `/governor tdd` | Enable with the TDD state machine |
 | `/governor off` | Disable |
 | `/governor status` | Show current phase, blocked tools, and available transitions |
-| `/governor transition <target> [evidence_key]` | Request transition to a target state with evidence |
+| `/governor transition <target> <evidence_key>` | Request transition to a target state with evidence |
 | `/governor evidence` | List all captured evidence entries |
 
 ### Tool blocking
@@ -132,15 +133,15 @@ Each phase defines which tools are blocked, with glob exceptions:
 | Phase | Blocked | Exceptions |
 |---|---|---|
 | `writing_tests` | `Write`, `Edit` | `Write(test_*)`, `Edit(test_*)` |
-| `fixing_tests` | *(none)* | — |
-| `refactoring` | *(none)* | — |
-| `fixing_lint` | *(none)* | — |
+| `fixing_tests` | *(none)* | -- |
+| `refactoring` | *(none)* | -- |
+| `fixing_lint` | *(none)* | -- |
 
 Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are never blocked.
 
 ### Evidence capture
 
-Each phase defines **capture rules** — patterns that match tool output and store it as evidence:
+Each phase defines **capture rules** — glob patterns that match tool calls and store their output:
 
 ```json
 "capture": [
@@ -149,7 +150,9 @@ Each phase defines **capture rules** — patterns that match tool output and sto
 ]
 ```
 
-When a tool call matches, the output is stored with a unique key (e.g., `evt_abc123`) and the agent is told how to use it for a transition.
+When a tool call matches a pattern, the PostToolUse (or PostToolUseFailure) hook stores the output in a tamper-proof evidence locker with a unique key (e.g., `evt_abc123`). The agent is told the key and which transitions it unlocks.
+
+Evidence entries include the tool name, command, full output, exit code, and timestamp. Both successful and failed tool calls are captured.
 
 ### Evidence contracts and gates
 
@@ -160,20 +163,20 @@ Each transition can require specific evidence, validated by a gate:
  "evidence_contract": {"required_type": "pytest_output", "gate": "pytest_fail_gate"}}
 ```
 
-Built-in gates:
+Built-in gates (trust mode -- verify evidence type matches):
 
-| Gate | Checks |
+| Gate | Required evidence type |
 |---|---|
-| `pytest_pass_gate` | All tests passing (exit code 0) |
-| `pytest_fail_gate` | Test failures present (exit code non-zero) |
-| `lint_pass_gate` | No lint violations (exit code 0) |
-| `lint_fail_gate` | Lint violations present (exit code non-zero) |
+| `pytest_pass_gate` | `pytest_output` |
+| `pytest_fail_gate` | `pytest_output` |
+| `lint_pass_gate` | `lint_output` |
+| `lint_fail_gate` | `lint_output` |
 
-Transitions without an evidence contract are free (no proof required).
+Transitions with `"evidence_contract": null` are free (no proof required).
 
 ### Defining custom machines
 
-Machines are JSON files in `machines/`:
+Machines are JSON files in `machines/`. Each node defines tool blocking rules and capture patterns; each edge defines which evidence is needed to traverse it:
 
 ```json
 {
@@ -206,16 +209,17 @@ Machines are JSON files in `machines/`:
 
 ### Architecture
 
-Under the hood, the governor uses four Claude Code hook events. Each hook is a shell script that computes a session ID from `MD5($PWD)`, checks a lock file, and delegates to `python3 -m governor_v4`:
+The governor uses five Claude Code hook events. Each hook is a shell script that computes a session ID from `MD5($PWD)`, checks a lock file, and delegates to `python3 -m governor_v4`:
 
 | Hook | When it fires | What it does |
 |---|---|---|
 | `SessionStart` | Session opens | Restores governor state, injects phase context |
 | `UserPromptSubmit` | User sends a message | Parses `/governor` commands |
-| `PreToolUse` | Before any tool call | Checks tool against phase blocklist → allow or deny |
-| `PostToolUse` | After a tool completes | Matches capture rules, stores evidence |
+| `PreToolUse` | Before any tool call | Checks tool against phase blocklist -- allow or deny |
+| `PostToolUse` | After a tool succeeds | Matches capture rules, stores evidence in locker |
+| `PostToolUseFailure` | After a tool fails | Same as PostToolUse but captures error output and exit code |
 
-State is persisted to `/tmp/ctx-governor/<session_id>/` as JSON files. The evidence locker stores captured tool output alongside the engine state.
+State is persisted to `/tmp/ctx-governor/<session_id>/` as JSON files: engine state (`<session_id>.json`), activation record (`active`), and evidence locker (`<session_id>_evidence.json`).
 
 ## Context Injection (lightweight mode)
 
