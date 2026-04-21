@@ -10,6 +10,7 @@ from governor_v4.cli import (
     deactivate_governor,
     load_engine,
 )
+from governor_v4.primitives import match_capture_rule
 
 
 class TestStateDir:
@@ -223,3 +224,78 @@ class TestCmdEvaluate:
         hook_input = {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
         output = run_evaluate("nonexistent", hook_input)
         assert output is None  # inactive = pass-through
+
+
+class TestCmdCapture:
+    def test_capture_matching_tool(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_capture import run_capture
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest tests/"},
+            "tool_output": "FAILED 2 tests",
+            "tool_exit_code": 1,
+        }
+        output = run_capture("s1", hook_input)
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "evt_" in ctx
+
+    def test_capture_non_matching_tool(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_capture import run_capture
+        hook_input = {
+            "tool_name": "Read",
+            "tool_input": {"file_path": "main.py"},
+            "tool_output": "file contents",
+        }
+        output = run_capture("s1", hook_input)
+        assert output is None  # no capture rule matched
+
+    def test_capture_stores_in_locker(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_capture import run_capture
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest tests/"},
+            "tool_output": "PASSED 5 tests",
+            "tool_exit_code": 0,
+        }
+        output = run_capture("s1", hook_input)
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        # Extract key from context
+        key = [w for w in ctx.split() if w.startswith("evt_")][0]
+
+        # Verify it's in the locker
+        engine = load_engine("s1")
+        entry = engine.locker.retrieve(key)
+        assert entry is not None
+        assert entry["type"] == "pytest_output"
+
+    def test_capture_inactive_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        from governor_v4.cmd_capture import run_capture
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest"},
+            "tool_output": "output",
+        }
+        output = run_capture("nonexistent", hook_input)
+        assert output is None
