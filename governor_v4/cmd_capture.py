@@ -6,6 +6,20 @@ from governor_v4.cli import load_engine
 from governor_v4.primitives import match_capture_rule
 
 
+def _parse_exit_code(error: str) -> int | None:
+    """Extract exit code from PostToolUseFailure error string.
+
+    Error strings start with 'Exit code N\\n...'
+    """
+    if error and error.startswith("Exit code "):
+        first_line = error.split("\n", 1)[0]
+        try:
+            return int(first_line.removeprefix("Exit code "))
+        except ValueError:
+            pass
+    return None
+
+
 def run_capture(session_id: str, hook_input: dict) -> str | None:
     """Match capture rules and store evidence. Returns hook JSON or None."""
     engine = load_engine(session_id)
@@ -14,16 +28,22 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
 
     tool_name = hook_input.get("tool_name", "")
     tool_input = hook_input.get("tool_input", {})
-    tool_response = hook_input.get("tool_response", {})
+    is_failure = hook_input.get("hook_event_name") == "PostToolUseFailure"
 
-    # tool_response is an object for Bash ({stdout, stderr, interrupted, ...})
-    # or a string/object for other tools — no exit_code field exists
-    if isinstance(tool_response, dict):
-        tool_output = tool_response.get("stdout", "")
-        exit_code = None
+    if is_failure:
+        # PostToolUseFailure: output is in "error" field, starts with "Exit code N\n"
+        error = hook_input.get("error", "")
+        exit_code = _parse_exit_code(error)
+        # Strip the "Exit code N\n\n" prefix to get the actual output
+        tool_output = error.split("\n", 2)[-1].lstrip("\n") if error else ""
     else:
-        tool_output = str(tool_response) if tool_response else ""
-        exit_code = None
+        # PostToolUse: output is in tool_response
+        tool_response = hook_input.get("tool_response", {})
+        if isinstance(tool_response, dict):
+            tool_output = tool_response.get("stdout", "")
+        else:
+            tool_output = str(tool_response) if tool_response else ""
+        exit_code = 0
 
     # Get the tool arg for matching
     if tool_name == "Bash":

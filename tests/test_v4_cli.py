@@ -310,7 +310,35 @@ class TestCmdCapture:
         assert entry is not None
         assert entry["type"] == "pytest_output"
         assert entry["output"] == "PASSED 5 tests"
-        assert entry["exit_code"] is None  # Claude Code doesn't send exit_code
+        assert entry["exit_code"] == 0  # PostToolUse implies success
+
+    def test_capture_failure_event(self, tmp_path, monkeypatch):
+        """PostToolUseFailure events have error string instead of tool_response."""
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_path = os.path.join(
+            os.path.dirname(__file__), "..", "machines", "tdd_v4.json"
+        )
+        activate_governor("s1", machine_path)
+
+        from governor_v4.cmd_capture import run_capture
+        hook_input = {
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest tests/"},
+            "error": "Exit code 1\n\nFAILED tests/test_foo.py::test_bar\n1 failed in 0.5s",
+            "is_interrupt": False,
+        }
+        output = run_capture("s1", hook_input)
+        assert output is not None
+        parsed = json.loads(output)
+        key = [w for w in parsed["hookSpecificOutput"]["additionalContext"].split()
+               if w.startswith("evt_")][0]
+
+        engine = load_engine("s1")
+        entry = engine.locker.retrieve(key)
+        assert entry is not None
+        assert entry["exit_code"] == 1
+        assert "FAILED" in entry["output"]
 
     def test_capture_inactive_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))

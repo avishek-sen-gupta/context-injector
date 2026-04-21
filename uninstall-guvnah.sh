@@ -16,7 +16,7 @@ fi
 
 # --- remove hooks from settings.json ---
 if [ -f "$SETTINGS" ]; then
-  for EVENT in SessionStart PreToolUse PostToolUse UserPromptSubmit; do
+  for EVENT in SessionStart PreToolUse PostToolUse PostToolUseFailure UserPromptSubmit; do
     echo "Removing $EVENT guvnah hook..."
     jq '.hooks.'"$EVENT"' = [(.hooks.'"$EVENT"' // [])[] | select(.hooks[0].command | contains("guvnah") | not)]
        | if (.hooks.'"$EVENT"' | length) == 0 then del(.hooks.'"$EVENT"') else . end' \

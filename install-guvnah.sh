@@ -24,7 +24,7 @@ echo "Installing guvnah to $DEST ..."
 
 # --- install hooks (prepend PYTHONPATH and GUVNAH_MACHINES) ---
 mkdir -p "$DEST"
-for f in session-start.sh pre-tool-use.sh post-tool-use.sh user-prompt-submit.sh; do
+for f in session-start.sh pre-tool-use.sh post-tool-use.sh post-tool-use-failure.sh user-prompt-submit.sh; do
     {
         echo '#!/usr/bin/env bash'
         echo "GUVNAH_ROOT=\"$REPO_ROOT\""
@@ -52,6 +52,7 @@ for pair in \
   "SessionStart:.claude/hooks/guvnah/session-start.sh" \
   "PreToolUse:.claude/hooks/guvnah/pre-tool-use.sh" \
   "PostToolUse:.claude/hooks/guvnah/post-tool-use.sh" \
+  "PostToolUseFailure:.claude/hooks/guvnah/post-tool-use-failure.sh" \
   "UserPromptSubmit:.claude/hooks/guvnah/user-prompt-submit.sh"; do
 
   EVENT="${pair%%:*}"

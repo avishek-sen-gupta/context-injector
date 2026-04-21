@@ -54,8 +54,25 @@ class TestShellHooks:
         assert result.returncode == 0
         assert result.stdout.strip() == ""
 
+    def test_post_tool_use_failure_inactive_exits_0(self):
+        result = subprocess.run(
+            ["bash", os.path.join(HOOKS_DIR, "post-tool-use-failure.sh")],
+            input=json.dumps({
+                "hook_event_name": "PostToolUseFailure",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest"},
+                "error": "Exit code 1\n\nFAILED",
+                "is_interrupt": False,
+            }),
+            capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": REPO_ROOT},
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
     def test_hooks_are_executable(self):
-        for name in ["session-start.sh", "pre-tool-use.sh", "post-tool-use.sh", "user-prompt-submit.sh"]:
+        for name in ["session-start.sh", "pre-tool-use.sh", "post-tool-use.sh",
+                      "post-tool-use-failure.sh", "user-prompt-submit.sh"]:
             path = os.path.join(HOOKS_DIR, name)
             assert os.access(path, os.X_OK), f"{name} is not executable"
 
@@ -90,11 +107,13 @@ class TestFullCycle:
         output = run_evaluate("s1", {"tool_name": "Write", "tool_input": {"file_path": "test_foo.py"}})
         assert output is None  # allowed
 
-        # 4. Capture pytest output
+        # 4. Capture pytest failure (PostToolUseFailure event)
         output = run_capture("s1", {
+            "hook_event_name": "PostToolUseFailure",
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
-            "tool_response": {"stdout": "FAILED 1 test", "stderr": ""},
+            "error": "Exit code 1\n\nFAILED 1 test",
+            "is_interrupt": False,
         })
         assert output is not None
         ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
