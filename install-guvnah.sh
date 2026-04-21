@@ -36,6 +36,10 @@ for f in session-start.sh pre-tool-use.sh post-tool-use.sh post-tool-use-failure
     chmod +x "$DEST/$f"
 done
 
+# --- install pipefail guard (no PYTHONPATH needed) ---
+cp "$REPO_ROOT/hooks/guvnah/pipefail-guard.sh" "$DEST/pipefail-guard.sh"
+chmod +x "$DEST/pipefail-guard.sh"
+
 # --- install machines ---
 mkdir -p "$DEST/machines"
 for f in "$REPO_ROOT"/machines/*.json; do
@@ -70,6 +74,20 @@ for pair in \
     echo "$EVENT hook already wired, skipping."
   fi
 done
+
+# --- wire pipefail guard (PreToolUse with Bash matcher, idempotent) ---
+PIPEFAIL_CMD=".claude/hooks/guvnah/pipefail-guard.sh"
+ALREADY=$(jq --arg cmd "$PIPEFAIL_CMD" \
+  '[.hooks.PreToolUse[]?.hooks[]?.command // ""] | any(contains($cmd))' "$SETTINGS")
+if [ "$ALREADY" = "false" ]; then
+  echo "Wiring pipefail guard..."
+  ENTRY='{"matcher": "Bash", "hooks": [{"type": "command", "command": "'"$PIPEFAIL_CMD"'"}]}'
+  jq --argjson entry "$ENTRY" \
+    '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [$entry])' \
+    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+else
+  echo "Pipefail guard already wired, skipping."
+fi
 
 # --- install guvnah-ctl CLI wrapper (with PYTHONPATH/GUVNAH_MACHINES baked in) ---
 echo "Installing guvnah-ctl CLI wrapper..."
