@@ -2,8 +2,7 @@
 # PostToolUse hook — capture tool output as evidence.
 set -euo pipefail
 
-SESSION="${CLAUDE_SESSION_ID:-}"
-[ -z "$SESSION" ] && exit 0
+SESSION="$(printf '%s' "$PWD" | (md5 2>/dev/null || md5sum | cut -d' ' -f1))"
 
 LOCK="/tmp/ctx-governor/${SESSION}/active"
 [ -f "$LOCK" ] || exit 0

@@ -70,17 +70,17 @@ for pair in \
   fi
 done
 
-# --- install governor CLI wrapper (with PYTHONPATH/GUVNAH_MACHINES baked in) ---
-echo "Installing governor CLI wrapper..."
+# --- install guvnah-ctl CLI wrapper (with PYTHONPATH/GUVNAH_MACHINES baked in) ---
+echo "Installing guvnah-ctl CLI wrapper..."
 {
     echo '#!/usr/bin/env bash'
     echo "GUVNAH_ROOT=\"$REPO_ROOT\""
     echo 'export PYTHONPATH="$GUVNAH_ROOT${PYTHONPATH:+:$PYTHONPATH}"'
     echo 'export GUVNAH_MACHINES="$(cd "$(dirname "$0")" && pwd)/machines"'
     # Append everything after the shebang from the source
-    tail -n +2 "$REPO_ROOT/bin/governor"
-} > "$DEST/governor"
-chmod +x "$DEST/governor"
+    tail -n +2 "$REPO_ROOT/bin/guvnah-ctl"
+} > "$DEST/ctl"
+chmod +x "$DEST/ctl"
 
 # --- install /governor command ---
 echo "Installing /governor command..."
@@ -89,7 +89,7 @@ cp "$REPO_ROOT/commands/governor.md" "$PROJECT_DIR/.claude/commands/governor.md"
 
 # --- add Bash permissions (idempotent) ---
 echo "Adding Bash permissions..."
-jq '.permissions.allow = ((.permissions.allow // []) + ["Bash(.claude/hooks/guvnah/governor*)", "Bash(mkdir:/tmp/ctx-governor)", "Bash(touch:/tmp/ctx-governor/*)", "Bash(rm:/tmp/ctx-governor/*)"] | unique)' \
+jq '.permissions.allow = ((.permissions.allow // []) + ["Bash(.claude/hooks/guvnah/ctl*)", "Bash(mkdir:/tmp/ctx-governor)", "Bash(touch:/tmp/ctx-governor/*)", "Bash(rm:/tmp/ctx-governor/*)"] | unique)' \
   "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 
 echo ""

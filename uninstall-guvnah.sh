@@ -28,7 +28,7 @@ if [ -f "$SETTINGS" ]; then
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
 
   echo "Removing Bash permissions..."
-  jq '.permissions.allow = [(.permissions.allow // [])[] | select(startswith("Bash(mkdir:/tmp/ctx-governor)") or startswith("Bash(touch:/tmp/ctx-governor") or startswith("Bash(rm:/tmp/ctx-governor") | not)]
+  jq '.permissions.allow = [(.permissions.allow // [])[] | select(startswith("Bash(.claude/hooks/guvnah/ctl") or startswith("Bash(.claude/hooks/guvnah/governor") or startswith("Bash(mkdir:/tmp/ctx-governor)") or startswith("Bash(touch:/tmp/ctx-governor") or startswith("Bash(rm:/tmp/ctx-governor") | not)]
      | if (.permissions.allow | length) == 0 then del(.permissions.allow) else . end
      | if (.permissions | length) == 0 then del(.permissions) else . end' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"

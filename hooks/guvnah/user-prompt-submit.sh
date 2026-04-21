@@ -2,8 +2,7 @@
 # UserPromptSubmit hook — parse /governor commands.
 set -euo pipefail
 
-SESSION="${CLAUDE_SESSION_ID:-}"
-[ -z "$SESSION" ] && exit 0
+SESSION="$(printf '%s' "$PWD" | (md5 2>/dev/null || md5sum | cut -d' ' -f1))"
 
 # Quick check: does stdin contain a governor command?
 # Matches both raw "/governor" and expanded "Governor workflow enforcer has been invoked with:"

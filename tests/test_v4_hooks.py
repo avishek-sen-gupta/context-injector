@@ -15,8 +15,7 @@ class TestShellHooks:
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "session-start.sh")],
             capture_output=True, text=True,
-            env={**os.environ, "CLAUDE_SESSION_ID": "nonexistent-test-session",
-                 "PYTHONPATH": REPO_ROOT},
+            env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
@@ -26,8 +25,7 @@ class TestShellHooks:
             ["bash", os.path.join(HOOKS_DIR, "pre-tool-use.sh")],
             input=json.dumps({"tool_name": "Write", "tool_input": {"file_path": "x.py"}}),
             capture_output=True, text=True,
-            env={**os.environ, "CLAUDE_SESSION_ID": "nonexistent-test-session",
-                 "PYTHONPATH": REPO_ROOT},
+            env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
@@ -41,8 +39,7 @@ class TestShellHooks:
                 "tool_output": "PASSED",
             }),
             capture_output=True, text=True,
-            env={**os.environ, "CLAUDE_SESSION_ID": "nonexistent-test-session",
-                 "PYTHONPATH": REPO_ROOT},
+            env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
@@ -52,8 +49,7 @@ class TestShellHooks:
             ["bash", os.path.join(HOOKS_DIR, "user-prompt-submit.sh")],
             input=json.dumps({"prompt": "just a normal prompt"}),
             capture_output=True, text=True,
-            env={**os.environ, "CLAUDE_SESSION_ID": "test-session",
-                 "PYTHONPATH": REPO_ROOT},
+            env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
