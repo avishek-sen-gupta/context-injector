@@ -14,8 +14,16 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
 
     tool_name = hook_input.get("tool_name", "")
     tool_input = hook_input.get("tool_input", {})
-    tool_output = hook_input.get("tool_output", "")
-    exit_code = hook_input.get("tool_exit_code")
+    tool_response = hook_input.get("tool_response", {})
+
+    # tool_response is an object for Bash ({stdout, stderr, exit_code})
+    # or a string/object for other tools
+    if isinstance(tool_response, dict):
+        tool_output = tool_response.get("stdout", "")
+        exit_code = tool_response.get("exit_code")
+    else:
+        tool_output = str(tool_response) if tool_response else ""
+        exit_code = None
 
     # Get the tool arg for matching
     if tool_name == "Bash":

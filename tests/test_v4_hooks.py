@@ -36,7 +36,7 @@ class TestShellHooks:
             input=json.dumps({
                 "tool_name": "Bash",
                 "tool_input": {"command": "pytest"},
-                "tool_output": "PASSED",
+                "tool_response": {"stdout": "PASSED", "stderr": "", "exit_code": 0},
             }),
             capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
@@ -94,8 +94,7 @@ class TestFullCycle:
         output = run_capture("s1", {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
-            "tool_output": "FAILED 1 test",
-            "tool_exit_code": 1,
+            "tool_response": {"stdout": "FAILED 1 test", "stderr": "", "exit_code": 1},
         })
         assert output is not None
         ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]

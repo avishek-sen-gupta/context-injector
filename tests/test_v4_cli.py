@@ -261,8 +261,7 @@ class TestCmdCapture:
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
-            "tool_output": "FAILED 2 tests",
-            "tool_exit_code": 1,
+            "tool_response": {"stdout": "FAILED 2 tests", "stderr": "", "exit_code": 1},
         }
         output = run_capture("s1", hook_input)
         assert output is not None
@@ -281,7 +280,7 @@ class TestCmdCapture:
         hook_input = {
             "tool_name": "Read",
             "tool_input": {"file_path": "main.py"},
-            "tool_output": "file contents",
+            "tool_response": "file contents",
         }
         output = run_capture("s1", hook_input)
         assert output is None  # no capture rule matched
@@ -297,8 +296,7 @@ class TestCmdCapture:
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
-            "tool_output": "PASSED 5 tests",
-            "tool_exit_code": 0,
+            "tool_response": {"stdout": "PASSED 5 tests", "stderr": "", "exit_code": 0},
         }
         output = run_capture("s1", hook_input)
         parsed = json.loads(output)
@@ -311,6 +309,8 @@ class TestCmdCapture:
         entry = engine.locker.retrieve(key)
         assert entry is not None
         assert entry["type"] == "pytest_output"
+        assert entry["output"] == "PASSED 5 tests"
+        assert entry["exit_code"] == 0
 
     def test_capture_inactive_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
@@ -318,7 +318,7 @@ class TestCmdCapture:
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest"},
-            "tool_output": "output",
+            "tool_response": {"stdout": "output", "stderr": "", "exit_code": 0},
         }
         output = run_capture("nonexistent", hook_input)
         assert output is None
