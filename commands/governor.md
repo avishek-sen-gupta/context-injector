@@ -1,3 +1,11 @@
-The Governor workflow enforcer has been invoked with: $ARGUMENTS
+Control the Governor workflow enforcer. Accepts: a machine name (e.g. `tdd`) to activate, `off` to deactivate, `status` to check current state, `transition <target> [evidence_key]` to change phase, or `evidence` to list captured evidence.
 
-This command is handled automatically by the UserPromptSubmit hook. The hook will respond with context about the governor state. Simply wait for and relay the hook's response. Do not take any other action.
+The argument is: $ARGUMENTS
+
+Run this exact command:
+
+```bash
+.claude/hooks/guvnah/governor $ARGUMENTS
+```
+
+Respond with exactly what the command prints. Do not explain. Do not ask for confirmation.
