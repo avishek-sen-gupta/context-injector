@@ -128,7 +128,6 @@ class TestMainDispatch:
         )
         assert result.returncode != 0
 
-    @pytest.mark.skip(reason="cmd_prompt not yet implemented (Task 6)")
     def test_prompt_subcommand_exists(self):
         import subprocess
         import sys
@@ -299,3 +298,136 @@ class TestCmdCapture:
         }
         output = run_capture("nonexistent", hook_input)
         assert output is None
+
+
+class TestCmdPrompt:
+    def test_no_governor_command_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        from governor_v4.cmd_prompt import run_prompt
+        output = run_prompt("s1", "just a normal prompt")
+        assert output is None
+
+    def test_governor_start_activates(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        output = run_prompt("s1", "/governor tdd")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "writing_tests" in ctx
+        assert is_governor_active("s1")
+
+    def test_governor_off_deactivates(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        run_prompt("s1", "/governor tdd")
+        output = run_prompt("s1", "/governor off")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "deactivated" in ctx.lower()
+        assert not is_governor_active("s1")
+
+    def test_governor_status(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        run_prompt("s1", "/governor tdd")
+        output = run_prompt("s1", "/governor status")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "writing_tests" in ctx
+        assert "fixing_tests" in ctx  # available transition target
+
+    def test_governor_transition(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        # Activate and store some evidence
+        run_prompt("s1", "/governor tdd")
+        engine = load_engine("s1")
+        key = engine.locker.store("pytest_output", "Bash", "pytest", "FAILED", 1)
+
+        output = run_prompt("s1", f"/governor transition fixing_tests {key}")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "fixing_tests" in ctx
+
+    def test_governor_transition_denied(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        run_prompt("s1", "/governor tdd")
+        # No evidence — should deny
+        output = run_prompt("s1", "/governor transition fixing_tests")
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "deny" in ctx.lower() or "require" in ctx.lower()
+
+    def test_governor_evidence(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        run_prompt("s1", "/governor tdd")
+        engine = load_engine("s1")
+        key = engine.locker.store("pytest_output", "Bash", "pytest", "FAILED", 1)
+
+        output = run_prompt("s1", "/governor evidence")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert key in ctx
+        assert "pytest_output" in ctx
+
+    def test_governor_unknown_machine(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+        output = run_prompt("s1", "/governor nonexistent")
+        assert output is not None
+        parsed = json.loads(output)
+        ctx = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "not found" in ctx.lower()
