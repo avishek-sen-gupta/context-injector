@@ -39,6 +39,7 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
             )
             return json.dumps({
                 "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
                     "additionalContext": (
                         f"Evidence captured: {key} "
                         f"(type={rule.evidence_type}, phase={engine.current_phase}). "

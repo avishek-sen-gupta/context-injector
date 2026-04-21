@@ -20,6 +20,11 @@ def run_evaluate(session_id: str, hook_input: dict) -> str | None:
         return json.dumps({
             "decision": "block",
             "reason": result["message"],
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": result["message"],
+            },
         })
     return None
 

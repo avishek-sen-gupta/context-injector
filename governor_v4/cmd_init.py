@@ -29,6 +29,7 @@ def run_init(session_id: str) -> str | None:
 
     return json.dumps({
         "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
             "additionalContext": ctx,
         }
     })

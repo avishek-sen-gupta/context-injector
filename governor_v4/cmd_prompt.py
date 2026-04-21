@@ -18,7 +18,7 @@ _MACHINE_DIR = os.environ.get(
 
 
 def _hook_output(ctx: str) -> str:
-    return json.dumps({"hookSpecificOutput": {"additionalContext": ctx}})
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}})
 
 
 def _available_machines() -> list[str]:
