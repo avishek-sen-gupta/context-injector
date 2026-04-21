@@ -12,4 +12,3 @@ venv/
 .claude/state/
 .serena/
 *.egg-info/
-hooks/guvnah/.zdotdir/
