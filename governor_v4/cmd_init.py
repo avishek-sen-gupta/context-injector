@@ -1,7 +1,6 @@
 """SessionStart handler: restore engine state and inject phase context."""
 
 import json
-import sys
 
 from governor_v4.cli import load_engine, is_governor_active
 
@@ -28,17 +27,3 @@ def run_init(session_id: str) -> str | None:
     })
 
 
-def run(args: list[str]) -> None:
-    """CLI entry point for `python3 -m governor_v4 init`."""
-    session_id = None
-    for i, arg in enumerate(args):
-        if arg == "--session" and i + 1 < len(args):
-            session_id = args[i + 1]
-
-    if not session_id:
-        print("error: --session required", file=sys.stderr)
-        sys.exit(1)
-
-    output = run_init(session_id)
-    if output:
-        print(output)

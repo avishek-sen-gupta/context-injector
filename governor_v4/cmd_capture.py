@@ -1,7 +1,6 @@
 """PostToolUse handler: capture tool output as evidence."""
 
 import json
-import sys
 
 from governor_v4.cli import load_engine
 from governor_v4.primitives import match_capture_rule
@@ -51,21 +50,3 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
     return None
 
 
-def run(args: list[str]) -> None:
-    """CLI entry point for `python3 -m governor_v4 capture`."""
-    session_id = None
-    for i, arg in enumerate(args):
-        if arg == "--session" and i + 1 < len(args):
-            session_id = args[i + 1]
-
-    if not session_id:
-        print("error: --session required", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        hook_input = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError):
-        return  # fail open — skip capture
-    output = run_capture(session_id, hook_input)
-    if output:
-        print(output)

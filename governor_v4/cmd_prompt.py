@@ -2,7 +2,6 @@
 
 import json
 import os
-import sys
 
 from governor_v4.cli import (
     activate_governor,
@@ -153,22 +152,3 @@ def run_prompt(session_id: str, prompt: str) -> str | None:
     return _hook_output(ctx)
 
 
-def run(args: list[str]) -> None:
-    """CLI entry point for `python3 -m governor_v4 prompt`."""
-    session_id = None
-    for i, arg in enumerate(args):
-        if arg == "--session" and i + 1 < len(args):
-            session_id = args[i + 1]
-
-    if not session_id:
-        print("error: --session required", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        stdin_data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError):
-        return  # fail open — no command to parse
-    prompt = stdin_data.get("prompt", "")
-    output = run_prompt(session_id, prompt)
-    if output:
-        print(output)
