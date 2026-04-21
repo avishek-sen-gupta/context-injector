@@ -15,17 +15,10 @@ def run_init(session_id: str) -> str | None:
     if not engine:
         return None
 
+    from governor_v4.cmd_prompt import _describe_blocking
+
     node = engine._get_node()
-    blocked = node.blocked_tools or []
-    exceptions = node.allowed_exceptions or []
-
-    ctx_parts = [f"Governor active: phase={engine.current_phase}"]
-    if blocked:
-        ctx_parts.append(f"Blocked tools: {', '.join(blocked)}")
-    if exceptions:
-        ctx_parts.append(f"Exceptions: {', '.join(exceptions)}")
-
-    ctx = ". ".join(ctx_parts) + "."
+    ctx = f"Governor active: phase={engine.current_phase}. {_describe_blocking(node)}"
 
     return json.dumps({
         "hookSpecificOutput": {

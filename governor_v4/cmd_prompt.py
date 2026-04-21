@@ -31,6 +31,21 @@ def _available_machines() -> list[str]:
     ]
 
 
+def _describe_blocking(node) -> str:
+    """Human-readable description of what's blocked and what's allowed."""
+    blocked = node.blocked_tools or []
+    exceptions = node.allowed_exceptions or []
+    if not blocked:
+        return "No tools blocked — all writes allowed."
+    exc_desc = ", ".join(exceptions) if exceptions else None
+    if exc_desc:
+        return (
+            f"{', '.join(blocked)} blocked for production code, "
+            f"but ALLOWED for: {exc_desc}."
+        )
+    return f"{', '.join(blocked)} blocked."
+
+
 _EXPANDED_PREFIX = "The Governor workflow enforcer has been invoked with:"
 
 
@@ -70,10 +85,9 @@ def run_prompt(session_id: str, prompt: str) -> str | None:
         node = engine._get_node()
         edges = [e for e in engine.config.edges if e.from_state == engine.current_phase]
         targets = [e.to_state for e in edges]
-        blocked = node.blocked_tools or []
         ctx = (
             f"Phase: {engine.current_phase}. "
-            f"Blocked: {', '.join(blocked) if blocked else 'none'}. "
+            f"{_describe_blocking(node)} "
             f"Available transitions: {', '.join(targets) if targets else 'none'}."
         )
         return _hook_output(ctx)
@@ -89,11 +103,10 @@ def run_prompt(session_id: str, prompt: str) -> str | None:
         result = engine.want_to_transition(target, evidence_key)
         if result["action"] == "allow":
             node = engine._get_node()
-            blocked = node.blocked_tools or []
             ctx = (
                 f"Transition allowed: {result['from_state']} -> {result['to_state']}. "
                 f"Now in {engine.current_phase}. "
-                f"Blocked: {', '.join(blocked) if blocked else 'none'}."
+                f"{_describe_blocking(node)}"
             )
         else:
             ctx = f"Transition denied: {result['message']}"
@@ -132,11 +145,10 @@ def run_prompt(session_id: str, prompt: str) -> str | None:
 
     engine = activate_governor(session_id, machine_path)
     node = engine._get_node()
-    blocked = node.blocked_tools or []
     ctx = (
         f"Governor activated: machine={engine.config.name}, "
         f"phase={engine.current_phase}. "
-        f"Blocked: {', '.join(blocked) if blocked else 'none'}."
+        f"{_describe_blocking(node)}"
     )
     return _hook_output(ctx)
 
