@@ -3,17 +3,17 @@
 [![CI](https://github.com/avishek-sen-gupta/context-injector/actions/workflows/ci.yml/badge.svg)](https://github.com/avishek-sen-gupta/context-injector/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
-A Claude Code plugin that governs agent behavior during development workflows. It enforces discipline — blocking tools that shouldn't be used, requiring evidence before state transitions, and producing an audit trail of every decision.
+A collection of Claude Code hooks and tools for enforcing discipline during agentic development workflows.
 
-Three modes, from lightweight to full enforcement:
+**Tools:**
 
-1. **Governor** (`/governor`) — an evidence-based state machine that enforces workflow phases, blocks disallowed tools, captures tool output as evidence, and validates transitions via gates
-2. **Context Injection** (`/ctx`) — keyword-based context injection without enforcement, for projects that want guidance without guardrails
-3. **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
+- **Pipefail Guard** — a PreToolUse hook that prepends `set -o pipefail;` to every Bash command, ensuring pipeline failures are caught
+- **Governor** (`/governor`) — an evidence-based state machine that enforces workflow phases, blocks disallowed tools, captures tool output as evidence, and validates transitions via gates
+- **Context Injection** (`/ctx`) — keyword-based context injection that adds relevant guidance files to every prompt based on what you're working on
+- **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
+- **Git Terminology Guard** — a git pre-commit hook that prevents forbidden terms from entering source history, plus a history scanner for auditing past commits
 
-Plus a standalone **Git Terminology Guard** — a pre-commit hook that prevents forbidden terms from entering source history, plus a history scanner for auditing past commits.
-
-All modes are independent and can be installed/enabled simultaneously.
+All tools are independent and can be installed/enabled simultaneously.
 
 ## Governor
 
@@ -308,10 +308,11 @@ Each project provides its own context files:
 
 All three modes use **separate lock files / hooks** and can be enabled independently:
 
-| Mode | Command | Hook events |
+| Tool | Command | Hook events |
 |---|---|---|
 | Context Injection | `/ctx on\|off` | `UserPromptSubmit` |
 | Governor | `/governor tdd\|off\|status` | `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit` |
+| Pipefail Guard | `install-guvnah.sh` | `PreToolUse` (matcher: Bash) |
 | Beads Terminology Guard | `install-bd-guard.sh` / `uninstall-bd-guard.sh` | `PreToolUse` |
 | Git Terminology Guard | `install-terminology-guard.sh` / `uninstall-terminology-guard.sh` | git pre-commit hook |
 
