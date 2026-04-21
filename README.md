@@ -19,7 +19,101 @@ All tools are independent and can be installed/enabled simultaneously.
 
 ## Governor
 
-The governor wraps Claude Code in an evidence-based state machine. Every tool call is evaluated against the current workflow phase. Tools that violate the phase are blocked. The agent decides when to transition and provides evidence — the governor validates that evidence via gates before allowing the transition.
+The governor is a guardrail system for Claude Code. It enforces workflow discipline by controlling **what the agent can do** at each phase and requiring **proof of work** before allowing phase transitions.
+
+Think of it as a traffic cop sitting between Claude and its tools:
+
+```
+  You: "Add a login feature using TDD"
+                    │
+                    ▼
+  ┌──────────────────────────────────┐
+  │  Governor: phase = writing_tests │
+  │                                  │
+  │  ✅ Write("test_login.py")       │  ← test file, allowed
+  │  🚫 Write("auth.py")            │  ← production file, BLOCKED
+  │  ✅ Read("auth.py")              │  ← reading is always fine
+  │  ✅ Bash("pytest")               │  ← captured as evidence
+  │                                  │
+  │  Tests fail → evidence captured  │
+  │  Agent requests transition       │
+  │  Governor checks evidence ✓     │
+  │                                  │
+  │  Governor: phase = fixing_tests  │
+  │                                  │
+  │  ✅ Write("auth.py")             │  ← now allowed
+  │  ✅ Write("test_login.py")       │  ← still allowed
+  └──────────────────────────────────┘
+```
+
+### The TDD cycle
+
+The built-in TDD machine enforces red-green-refactor:
+
+```
+                    ┌─────────────────┐
+                    │  writing_tests  │ ← START
+                    │                 │
+                    │  🚫 Write/Edit  │
+                    │  ✅ test_* only │
+                    └────────┬────────┘
+                             │
+                     pytest fails (evidence)
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  fixing_tests   │
+                    │                 │
+                    │  ✅ all files   │
+                    └────────┬────────┘
+                             │
+                     pytest passes (evidence)
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  refactoring    │
+                    │                 │
+                    │  ✅ all files   │
+                    └────────┬────────┘
+                             │
+                      lint check runs
+                       ┌─────┴─────┐
+                       │           │
+                    passes      fails
+                       │           │
+                       ▼           ▼
+              back to          ┌─────────────────┐
+           writing_tests       │  fixing_lint    │
+                               │                 │
+                               │  ✅ all files   │
+                               └────────┬────────┘
+                                        │
+                                   lint passes
+                                        │
+                                        ▼
+                               back to refactoring
+```
+
+Each box is a **phase**. Each arrow is a **transition** that requires evidence — the agent must actually run pytest or the linter, and the governor verifies the output before allowing the move.
+
+### How transitions work
+
+Unlike traditional state machines where transitions fire on events, the governor requires proof:
+
+```
+  1. Agent does the work         Bash("pytest tests/ -v")
+                                        │
+  2. Governor captures output    PostToolUse hook stores result
+                                 as evidence (evt_abc123)
+                                        │
+  3. Agent requests transition   /governor transition fixing_tests evt_abc123
+                                        │
+  4. Governor validates          Does evt_abc123 contain failing tests?
+                                 Yes → transition allowed
+                                 No  → transition denied
+```
+
+This means transitions are grounded in real tool output, not declarations. The agent can't just say "tests fail" — it has to run them, and the governor checks.
 
 ### Commands
 
@@ -31,153 +125,22 @@ The governor wraps Claude Code in an evidence-based state machine. Every tool ca
 | `/governor transition <target> [evidence_key]` | Request transition to a target state with evidence |
 | `/governor evidence` | List all captured evidence entries |
 
-### How it works
-
-The governor uses four Claude Code hook events. Each hook is a thin shell script that computes a session ID from `MD5($PWD)`, checks a lock file, and delegates to `python3 -m governor_v4`.
-
-```
-                         Claude Code
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                     │
-  SessionStart        UserPromptSubmit        Tool Call
-        │                    │               ┌─────┴─────┐
-        ▼                    ▼               ▼           ▼
-  session-start.sh   user-prompt-submit.sh  pre-tool-use.sh  post-tool-use.sh
-        │                    │               │           │
-        ▼                    ▼               ▼           ▼
-   governor_v4          governor_v4      governor_v4  governor_v4
-     cmd_init            cmd_prompt      cmd_evaluate cmd_capture
-        │                    │               │           │
-        ▼                    ▼               ▼           ▼
-  Load engine,       Parse /governor     Check tool   Match capture
-  inject phase       commands, toggle    against      rules, store
-  context            activation          blocklist    evidence
-        │                    │               │           │
-        ▼                    ▼               ▼           ▼
-  additionalContext   additionalContext   allow/deny  additionalContext
-  (phase + rules)    (status message)    decision    (evidence key)
-```
-
-#### Dataflow per hook
-
-**1. SessionStart** — restores governor state on session open
-
-```
-Claude Code starts session
-  → session-start.sh
-    → MD5($PWD) → session_id
-    → check /tmp/ctx-governor/<session>/active exists, else exit 0
-    → python3 -m governor_v4 init --session <session_id>
-      → load engine from /tmp/ctx-governor/<session>/<session>.json
-      → read current phase + blocked tools from machine config
-      → stdout: {"hookSpecificOutput": {"hookEventName": "SessionStart",
-          "additionalContext": "Governor active: phase=writing_tests. Write, Edit blocked..."}}
-  → Claude sees phase context in conversation
-```
-
-**2. UserPromptSubmit** — parses `/governor` commands
-
-```
-User types "/governor tdd"
-  → user-prompt-submit.sh
-    → grep stdin for "/governor" or expanded command prefix, else exit 0
-    → python3 -m governor_v4 prompt --session <session_id> < stdin
-      → extract command from prompt (raw "/governor tdd" or expanded form)
-      → /governor <machine>: load JSON, create lock file + state, return activation message
-      → /governor off: remove lock file + state dir
-      → /governor status: load engine, describe phase + blocked tools + transitions
-      → /governor transition <target> [key]: validate edge + evidence + gate, transition or deny
-      → /governor evidence: list all entries in evidence locker
-      → stdout: {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-          "additionalContext": "Governor activated: machine=tdd, phase=writing_tests..."}}
-  → Claude sees command result in conversation
-```
-
-**3. PreToolUse** — evaluates every tool call against current phase
-
-```
-Claude wants to call Write("main.py")
-  → pre-tool-use.sh
-    → check lock file exists, else exit 0
-    → python3 -m governor_v4 evaluate --session <session_id> < stdin
-      → stdin: {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
-      → load engine, get current node's blocked_tools + allowed_exceptions
-      → check_tool_allowed("Write", "main.py", blocked=["Write","Edit"],
-          exceptions=["Write(test_*)","Edit(test_*)"])
-      → "main.py" doesn't match "test_*" → BLOCKED
-      → stdout: {"decision": "block", "reason": "...",
-          "hookSpecificOutput": {"hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": "Write is blocked in writing_tests"}}
-  → Claude Code blocks the tool call, shows reason to agent
-
-Claude wants to call Write("test_auth.py")
-  → same flow, but "test_auth.py" matches "test_*" → ALLOWED
-  → no stdout (exit 0) → Claude Code allows the tool call
-```
-
-**4. PostToolUse** — captures tool output as evidence
-
-```
-Claude runs Bash("python3 -m pytest tests/ -v") and it completes
-  → post-tool-use.sh
-    → check lock file exists, else exit 0
-    → python3 -m governor_v4 capture --session <session_id> < stdin
-      → stdin: {"tool_name": "Bash", "tool_input": {"command": "python3 -m pytest ..."},
-          "tool_response": {"stdout": "FAILED 2 passed, 1 failed", "stderr": ""}}
-      → load engine, get current node's capture rules
-      → match_capture_rule("Bash", "python3 -m pytest ...", "Bash(*pytest*)")
-        → fnmatch "python3 -m pytest ..." against "*pytest*" → MATCH
-      → store in evidence locker: {type: "pytest_output", tool_name: "Bash",
-          command: "...", output: "...", exit_code: 1}
-      → stdout: {"hookSpecificOutput": {"hookEventName": "PostToolUse",
-          "additionalContext": "Evidence captured: evt_abc123 (type=pytest_output).
-            Use '/governor transition <target> evt_abc123' to request a state transition."}}
-  → Claude sees evidence key, can use it for transition
-```
-
-#### State persistence
-
-All state lives under `/tmp/ctx-governor/<session_id>/`:
-
-```
-/tmp/ctx-governor/
-  d41d8cd9.../              ← MD5 of project directory
-    active                  ← lock file (contains {"machine": "/path/to/tdd.json"})
-    d41d8cd9....json        ← engine state (contains {"current_phase": "writing_tests"})
-    d41d8cd9..._evidence.json  ← evidence locker (TinyDB)
-```
-
-Each hook invocation loads the engine from these files, performs its action, and saves updated state. The lock file doubles as the activation check — all hooks exit immediately if it doesn't exist.
-
-### Evidence-based transitions
-
-Unlike traditional state machines where transitions fire automatically on events, the governor requires the agent to:
-
-1. **Do the work** — run pytest, run linters, etc.
-2. **Evidence is captured** — the PostToolUse hook stores matching tool output in an evidence locker
-3. **Request a transition** — `/governor transition <target> <evidence_key>`
-4. **Gate validates** — the edge's evidence contract specifies a gate that inspects the evidence and decides pass/fail
-
-This means transitions are grounded in real tool output, not declarations.
-
 ### Tool blocking
 
-The governor uses a **blocklist** approach — tools not listed are allowed. Each state defines which tools are blocked, with exceptions using `ToolName(glob_pattern)` syntax:
+Each phase defines which tools are blocked, with glob exceptions:
 
-| State | Blocked | Exceptions |
+| Phase | Blocked | Exceptions |
 |---|---|---|
 | `writing_tests` | `Write`, `Edit` | `Write(test_*)`, `Edit(test_*)` |
 | `fixing_tests` | *(none)* | — |
 | `refactoring` | *(none)* | — |
 | `fixing_lint` | *(none)* | — |
 
-Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are always allowed.
+Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are never blocked.
 
 ### Evidence capture
 
-Each node defines **capture rules** that match tool output and store it in the evidence locker:
+Each phase defines **capture rules** — patterns that match tool output and store it as evidence:
 
 ```json
 "capture": [
@@ -186,11 +149,11 @@ Each node defines **capture rules** that match tool output and store it in the e
 ]
 ```
 
-When a tool call matches a capture rule, the PostToolUse hook stores the output with a unique key (e.g., `evt_abc123`) and injects a message telling the agent how to use it for a transition.
+When a tool call matches, the output is stored with a unique key (e.g., `evt_abc123`) and the agent is told how to use it for a transition.
 
 ### Evidence contracts and gates
 
-Each edge can define an **evidence contract** — what type of evidence is required and which gate validates it:
+Each transition can require specific evidence, validated by a gate:
 
 ```json
 {"from": "writing_tests", "to": "fixing_tests",
@@ -199,37 +162,18 @@ Each edge can define an **evidence contract** — what type of evidence is requi
 
 Built-in gates:
 
-| Gate | What it checks |
+| Gate | Checks |
 |---|---|
-| `pytest_pass_gate` | Evidence contains pytest output with all tests passing (exit code 0) |
-| `pytest_fail_gate` | Evidence contains pytest output with test failures (exit code non-zero) |
-| `lint_pass_gate` | Evidence contains linter output with no violations (exit code 0) |
-| `lint_fail_gate` | Evidence contains linter output with violations (exit code non-zero) |
+| `pytest_pass_gate` | All tests passing (exit code 0) |
+| `pytest_fail_gate` | Test failures present (exit code non-zero) |
+| `lint_pass_gate` | No lint violations (exit code 0) |
+| `lint_fail_gate` | Lint violations present (exit code non-zero) |
 
-Edges without an evidence contract allow free transitions (no evidence required).
-
-### TDD cycle
-
-The default TDD machine enforces a red-green-refactor loop:
-
-```
-writing_tests → (pytest fails) → fixing_tests
-      ↑                              ↓
-      ├── (pytest pass) ←── refactoring ← (pytest passes)
-      │                          ↓
-      └──────────────── fixing_lint ← (lint fails)
-                            ↓
-                     (lint passes) → refactoring
-```
-
-- **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited. Captures pytest output.
-- **fixing_tests**: Write production code to make tests pass. All files editable. Captures pytest and lint output.
-- **refactoring**: Clean up code with passing tests. All files editable. Captures pytest and lint output.
-- **fixing_lint**: Fix lint violations. Captures lint output.
+Transitions without an evidence contract are free (no proof required).
 
 ### Defining custom machines
 
-Machines are JSON files placed in `machines/` and deployed to `~/.claude/plugins/guvnah/machines/`:
+Machines are JSON files in `machines/`:
 
 ```json
 {
@@ -260,9 +204,18 @@ Machines are JSON files placed in `machines/` and deployed to `~/.claude/plugins
 }
 ```
 
-### State persistence
+### Architecture
 
-Governor state is persisted to `/tmp/ctx-governor/<session_id>/` as JSON files. The evidence locker stores captured tool output alongside the state. State survives across hook invocations within a session.
+Under the hood, the governor uses four Claude Code hook events. Each hook is a shell script that computes a session ID from `MD5($PWD)`, checks a lock file, and delegates to `python3 -m governor_v4`:
+
+| Hook | When it fires | What it does |
+|---|---|---|
+| `SessionStart` | Session opens | Restores governor state, injects phase context |
+| `UserPromptSubmit` | User sends a message | Parses `/governor` commands |
+| `PreToolUse` | Before any tool call | Checks tool against phase blocklist → allow or deny |
+| `PostToolUse` | After a tool completes | Matches capture rules, stores evidence |
+
+State is persisted to `/tmp/ctx-governor/<session_id>/` as JSON files. The evidence locker stores captured tool output alongside the engine state.
 
 ## Context Injection (lightweight mode)
 
