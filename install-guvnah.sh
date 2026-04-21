@@ -36,11 +36,6 @@ for f in session-start.sh pre-tool-use.sh post-tool-use.sh post-tool-use-failure
     chmod +x "$DEST/$f"
 done
 
-# --- install bash-strict env file and setup hook (no PYTHONPATH needed) ---
-cp "$REPO_ROOT/hooks/guvnah/bash-strict.sh" "$DEST/bash-strict.sh"
-cp "$REPO_ROOT/hooks/guvnah/setup-bash-env.sh" "$DEST/setup-bash-env.sh"
-chmod +x "$DEST/setup-bash-env.sh"
-
 # --- install machines ---
 mkdir -p "$DEST/machines"
 for f in "$REPO_ROOT"/machines/*.json; do
@@ -54,7 +49,6 @@ fi
 
 # --- wire hooks (idempotent) ---
 for pair in \
-  "SessionStart:.claude/hooks/guvnah/setup-bash-env.sh" \
   "SessionStart:.claude/hooks/guvnah/session-start.sh" \
   "PreToolUse:.claude/hooks/guvnah/pre-tool-use.sh" \
   "PostToolUse:.claude/hooks/guvnah/post-tool-use.sh" \
