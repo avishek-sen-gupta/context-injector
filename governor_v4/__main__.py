@@ -23,7 +23,10 @@ def read_stdin() -> dict | None:
 
 def main():
     if len(sys.argv) < 2:
-        print("usage: python3 -m governor_v4 <init|evaluate|capture|prompt>", file=sys.stderr)
+        print(
+            "usage: python3 -m governor_v4 <init|evaluate|capture|prompt>",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     subcommand = sys.argv[1]
@@ -32,10 +35,12 @@ def main():
 
     if subcommand == "init":
         from governor_v4.cmd_init import run_init
+
         output = run_init(session_id)
 
     elif subcommand == "evaluate":
         from governor_v4.cmd_evaluate import run_evaluate
+
         hook_input = read_stdin()
         if not hook_input:
             return
@@ -43,6 +48,7 @@ def main():
 
     elif subcommand == "capture":
         from governor_v4.cmd_capture import run_capture
+
         hook_input = read_stdin()
         if not hook_input:
             return
@@ -50,6 +56,7 @@ def main():
 
     elif subcommand == "prompt":
         from governor_v4.cmd_prompt import run_prompt
+
         hook_input = read_stdin()
         if not hook_input:
             return

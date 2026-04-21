@@ -65,7 +65,9 @@ class GovernorV4:
         dir_path = os.path.dirname(path) or "."
         os.makedirs(dir_path, exist_ok=True)
         with open(path, "w") as f:
-            json.dump({"current_phase": self._current_phase, "machine": self.config.name}, f)
+            json.dump(
+                {"current_phase": self._current_phase, "machine": self.config.name}, f
+            )
 
     def evaluate(self, tool_name: str, tool_input: dict) -> dict:
         """Evaluate a tool call against current state. Returns action dict."""
@@ -85,14 +87,20 @@ class GovernorV4:
         )
 
         if allowed:
-            return {"action": "allow", "current_phase": self._current_phase, "message": None}
+            return {
+                "action": "allow",
+                "current_phase": self._current_phase,
+                "message": None,
+            }
         return {
             "action": "block",
             "current_phase": self._current_phase,
             "message": f"{tool_name} is blocked in {self._current_phase}",
         }
 
-    def want_to_transition(self, target_state: str, evidence_key: str | None = None) -> dict:
+    def want_to_transition(
+        self, target_state: str, evidence_key: str | None = None
+    ) -> dict:
         """Request a state transition with optional evidence.
 
         1. Find edge from current_state to target_state
@@ -156,7 +164,8 @@ class GovernorV4:
                 return {
                     "action": "deny",
                     "current_phase": self._current_phase,
-                    "message": result.message or f"Gate {edge.evidence_contract.gate} denied transition",
+                    "message": result.message
+                    or f"Gate {edge.evidence_contract.gate} denied transition",
                 }
 
         # 4. Transition

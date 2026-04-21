@@ -6,20 +6,23 @@ from dataclasses import dataclass, field
 @dataclass
 class CaptureRule:
     """Defines which tool outputs to capture as evidence."""
-    tool_pattern: str      # e.g. "Bash(*pytest*)"
-    evidence_type: str     # e.g. "pytest_output"
+
+    tool_pattern: str  # e.g. "Bash(*pytest*)"
+    evidence_type: str  # e.g. "pytest_output"
 
 
 @dataclass
 class EvidenceContract:
     """Defines what evidence an edge requires for transition."""
-    required_type: str     # must match CaptureRule.evidence_type
-    gate: str              # gate name from GATE_REGISTRY
+
+    required_type: str  # must match CaptureRule.evidence_type
+    gate: str  # gate name from GATE_REGISTRY
 
 
 @dataclass
 class NodeConfig:
     """A state node in the machine."""
+
     name: str
     initial: bool = False
     blocked_tools: list[str] = field(default_factory=list)
@@ -30,6 +33,7 @@ class NodeConfig:
 @dataclass
 class EdgeConfig:
     """A transition edge identified by from/to states."""
+
     from_state: str
     to_state: str
     evidence_contract: EvidenceContract | None = None
@@ -38,6 +42,7 @@ class EdgeConfig:
 @dataclass
 class MachineConfig:
     """Complete machine definition."""
+
     name: str
     description: str
     nodes: list[NodeConfig]

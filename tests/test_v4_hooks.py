@@ -14,7 +14,8 @@ class TestShellHooks:
     def test_session_start_inactive_exits_0(self):
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "session-start.sh")],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
@@ -23,8 +24,11 @@ class TestShellHooks:
     def test_pre_tool_use_inactive_exits_0(self):
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "pre-tool-use.sh")],
-            input=json.dumps({"tool_name": "Write", "tool_input": {"file_path": "x.py"}}),
-            capture_output=True, text=True,
+            input=json.dumps(
+                {"tool_name": "Write", "tool_input": {"file_path": "x.py"}}
+            ),
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
@@ -33,12 +37,15 @@ class TestShellHooks:
     def test_post_tool_use_inactive_exits_0(self):
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "post-tool-use.sh")],
-            input=json.dumps({
-                "tool_name": "Bash",
-                "tool_input": {"command": "pytest"},
-                "tool_response": {"stdout": "PASSED", "stderr": ""},
-            }),
-            capture_output=True, text=True,
+            input=json.dumps(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pytest"},
+                    "tool_response": {"stdout": "PASSED", "stderr": ""},
+                }
+            ),
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
@@ -48,7 +55,8 @@ class TestShellHooks:
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "user-prompt-submit.sh")],
             input=json.dumps({"prompt": "just a normal prompt"}),
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
@@ -57,22 +65,30 @@ class TestShellHooks:
     def test_post_tool_use_failure_inactive_exits_0(self):
         result = subprocess.run(
             ["bash", os.path.join(HOOKS_DIR, "post-tool-use-failure.sh")],
-            input=json.dumps({
-                "hook_event_name": "PostToolUseFailure",
-                "tool_name": "Bash",
-                "tool_input": {"command": "pytest"},
-                "error": "Exit code 1\n\nFAILED",
-                "is_interrupt": False,
-            }),
-            capture_output=True, text=True,
+            input=json.dumps(
+                {
+                    "hook_event_name": "PostToolUseFailure",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pytest"},
+                    "error": "Exit code 1\n\nFAILED",
+                    "is_interrupt": False,
+                }
+            ),
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": REPO_ROOT},
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
 
     def test_hooks_are_executable(self):
-        for name in ["session-start.sh", "pre-tool-use.sh", "post-tool-use.sh",
-                      "post-tool-use-failure.sh", "user-prompt-submit.sh"]:
+        for name in [
+            "session-start.sh",
+            "pre-tool-use.sh",
+            "post-tool-use.sh",
+            "post-tool-use-failure.sh",
+            "user-prompt-submit.sh",
+        ]:
             path = os.path.join(HOOKS_DIR, name)
             assert os.access(path, os.X_OK), f"{name} is not executable"
 
@@ -86,6 +102,7 @@ class TestFullCycle:
         machine_dir.mkdir()
         src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
@@ -96,25 +113,35 @@ class TestFullCycle:
 
         # 1. Activate
         output = run_prompt("s1", "/governor tdd")
-        assert "writing_tests" in json.loads(output)["hookSpecificOutput"]["additionalContext"]
+        assert (
+            "writing_tests"
+            in json.loads(output)["hookSpecificOutput"]["additionalContext"]
+        )
 
         # 2. Block production write
-        output = run_evaluate("s1", {"tool_name": "Write", "tool_input": {"file_path": "main.py"}})
+        output = run_evaluate(
+            "s1", {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
+        )
         assert output is not None
         assert json.loads(output)["decision"] == "block"
 
         # 3. Allow test write
-        output = run_evaluate("s1", {"tool_name": "Write", "tool_input": {"file_path": "test_foo.py"}})
+        output = run_evaluate(
+            "s1", {"tool_name": "Write", "tool_input": {"file_path": "test_foo.py"}}
+        )
         assert output is None  # allowed
 
         # 4. Capture pytest failure (PostToolUseFailure event)
-        output = run_capture("s1", {
-            "hook_event_name": "PostToolUseFailure",
-            "tool_name": "Bash",
-            "tool_input": {"command": "pytest tests/"},
-            "error": "Exit code 1\n\nFAILED 1 test",
-            "is_interrupt": False,
-        })
+        output = run_capture(
+            "s1",
+            {
+                "hook_event_name": "PostToolUseFailure",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"},
+                "error": "Exit code 1\n\nFAILED 1 test",
+                "is_interrupt": False,
+            },
+        )
         assert output is not None
         ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
         key = [w for w in ctx.split() if w.startswith("evt_")][0]
@@ -125,7 +152,9 @@ class TestFullCycle:
         assert "fixing_tests" in ctx
 
         # 6. Verify production write now allowed
-        output = run_evaluate("s1", {"tool_name": "Write", "tool_input": {"file_path": "main.py"}})
+        output = run_evaluate(
+            "s1", {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
+        )
         assert output is None  # allowed in fixing_tests
 
         # 7. Status check
@@ -149,6 +178,7 @@ class TestFullCycle:
         machine_dir.mkdir()
         src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
@@ -170,6 +200,7 @@ class TestFullCycle:
         machine_dir.mkdir()
         src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
@@ -191,6 +222,7 @@ class TestFullCycle:
         machine_dir.mkdir()
         src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 

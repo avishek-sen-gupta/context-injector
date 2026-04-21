@@ -1,6 +1,10 @@
 import pytest
 from governor_v4.config import (
-    CaptureRule, EvidenceContract, NodeConfig, EdgeConfig, MachineConfig,
+    CaptureRule,
+    EvidenceContract,
+    NodeConfig,
+    EdgeConfig,
+    MachineConfig,
 )
 
 
@@ -13,7 +17,9 @@ class TestCaptureRule:
 
 class TestEvidenceContract:
     def test_creation(self):
-        contract = EvidenceContract(required_type="pytest_output", gate="pytest_fail_gate")
+        contract = EvidenceContract(
+            required_type="pytest_output", gate="pytest_fail_gate"
+        )
         assert contract.required_type == "pytest_output"
         assert contract.gate == "pytest_fail_gate"
 
@@ -25,7 +31,11 @@ class TestNodeConfig:
             initial=True,
             blocked_tools=["Write", "Edit"],
             allowed_exceptions=["Write(test_*)", "Edit(test_*)"],
-            capture=[CaptureRule(tool_pattern="Bash(*pytest*)", evidence_type="pytest_output")],
+            capture=[
+                CaptureRule(
+                    tool_pattern="Bash(*pytest*)", evidence_type="pytest_output"
+                )
+            ],
         )
         assert node.name == "writing_tests"
         assert node.initial is True
@@ -45,7 +55,9 @@ class TestEdgeConfig:
         edge = EdgeConfig(
             from_state="writing_tests",
             to_state="fixing_tests",
-            evidence_contract=EvidenceContract(required_type="pytest_output", gate="pytest_fail_gate"),
+            evidence_contract=EvidenceContract(
+                required_type="pytest_output", gate="pytest_fail_gate"
+            ),
         )
         assert edge.from_state == "writing_tests"
         assert edge.to_state == "fixing_tests"
@@ -75,7 +87,8 @@ class TestMachineConfig:
 
     def test_find_initial_node(self):
         machine = MachineConfig(
-            name="test", description="",
+            name="test",
+            description="",
             nodes=[NodeConfig(name="start", initial=True)],
             edges=[],
         )
@@ -83,7 +96,8 @@ class TestMachineConfig:
 
     def test_find_initial_node_missing_raises(self):
         machine = MachineConfig(
-            name="test", description="",
+            name="test",
+            description="",
             nodes=[NodeConfig(name="start")],
             edges=[],
         )
@@ -92,7 +106,8 @@ class TestMachineConfig:
 
     def test_find_edge(self):
         machine = MachineConfig(
-            name="test", description="",
+            name="test",
+            description="",
             nodes=[NodeConfig(name="a", initial=True), NodeConfig(name="b")],
             edges=[EdgeConfig(from_state="a", to_state="b")],
         )
@@ -102,7 +117,8 @@ class TestMachineConfig:
 
     def test_find_edge_missing_returns_none(self):
         machine = MachineConfig(
-            name="test", description="",
+            name="test",
+            description="",
             nodes=[NodeConfig(name="a", initial=True), NodeConfig(name="b")],
             edges=[],
         )

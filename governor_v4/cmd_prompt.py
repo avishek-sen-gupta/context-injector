@@ -17,16 +17,21 @@ _MACHINE_DIR = os.environ.get(
 
 
 def _hook_output(ctx: str) -> str:
-    return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}})
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": ctx,
+            }
+        }
+    )
 
 
 def _available_machines() -> list[str]:
     if not os.path.isdir(_MACHINE_DIR):
         return []
     return [
-        f.removesuffix(".json")
-        for f in os.listdir(_MACHINE_DIR)
-        if f.endswith(".json")
+        f.removesuffix(".json") for f in os.listdir(_MACHINE_DIR) if f.endswith(".json")
     ]
 
 
@@ -55,7 +60,7 @@ def _extract_command(prompt: str) -> str | None:
         if stripped.startswith("/governor"):
             return stripped
         if stripped.startswith(_EXPANDED_PREFIX):
-            args = stripped[len(_EXPANDED_PREFIX):].strip()
+            args = stripped[len(_EXPANDED_PREFIX) :].strip()
             return f"/governor {args}" if args else "/governor"
     return None
 
@@ -150,5 +155,3 @@ def run_prompt(session_id: str, prompt: str) -> str | None:
         f"{_describe_blocking(node)}"
     )
     return _hook_output(ctx)
-
-

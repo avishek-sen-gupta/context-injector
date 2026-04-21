@@ -4,7 +4,11 @@
 import json
 
 from governor_v4.config import (
-    NodeConfig, EdgeConfig, EvidenceContract, CaptureRule, MachineConfig,
+    NodeConfig,
+    EdgeConfig,
+    EvidenceContract,
+    CaptureRule,
+    MachineConfig,
 )
 
 
@@ -37,16 +41,20 @@ def _parse_nodes(raw: list[dict]) -> list[NodeConfig]:
             raise ValueError(f"duplicate node: {name}")
         seen.add(name)
         capture = [
-            CaptureRule(tool_pattern=c["tool_pattern"], evidence_type=c["evidence_type"])
+            CaptureRule(
+                tool_pattern=c["tool_pattern"], evidence_type=c["evidence_type"]
+            )
             for c in d.get("capture", [])
         ]
-        nodes.append(NodeConfig(
-            name=name,
-            initial=d.get("initial", False),
-            blocked_tools=d.get("blocked_tools", []),
-            allowed_exceptions=d.get("allowed_exceptions", []),
-            capture=capture,
-        ))
+        nodes.append(
+            NodeConfig(
+                name=name,
+                initial=d.get("initial", False),
+                blocked_tools=d.get("blocked_tools", []),
+                allowed_exceptions=d.get("allowed_exceptions", []),
+                capture=capture,
+            )
+        )
     return nodes
 
 
@@ -67,5 +75,7 @@ def _parse_edges(raw: list[dict], node_names: set[str]) -> list[EdgeConfig]:
                 gate=contract_raw["gate"],
             )
 
-        edges.append(EdgeConfig(from_state=from_s, to_state=to_s, evidence_contract=contract))
+        edges.append(
+            EdgeConfig(from_state=from_s, to_state=to_s, evidence_contract=contract)
+        )
     return edges

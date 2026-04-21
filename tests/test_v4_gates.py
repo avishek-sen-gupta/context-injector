@@ -2,8 +2,13 @@
 
 import pytest
 from governor_v4.gates import (
-    GateVerdict, EvidenceGate, GATE_REGISTRY,
-    PytestFailGate, PytestPassGate, LintFailGate, LintPassGate,
+    GateVerdict,
+    EvidenceGate,
+    GATE_REGISTRY,
+    PytestFailGate,
+    PytestPassGate,
+    LintFailGate,
+    LintPassGate,
 )
 from governor_v4.locker import EvidenceLocker
 
@@ -16,8 +21,11 @@ def locker(tmp_path):
 class TestPytestFailGate:
     def test_pass_with_matching_evidence(self, locker):
         key = locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED test_foo.py", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED test_foo.py",
+            exit_code=1,
         )
         gate = PytestFailGate()
         result = gate.validate([key], locker)
@@ -25,8 +33,11 @@ class TestPytestFailGate:
 
     def test_fail_with_wrong_evidence_type(self, locker):
         key = locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check", output="error", exit_code=1,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check",
+            output="error",
+            exit_code=1,
         )
         gate = PytestFailGate()
         result = gate.validate([key], locker)
@@ -41,8 +52,11 @@ class TestPytestFailGate:
 class TestPytestPassGate:
     def test_pass_with_matching_evidence(self, locker):
         key = locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="3 passed", exit_code=0,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="3 passed",
+            exit_code=0,
         )
         gate = PytestPassGate()
         result = gate.validate([key], locker)
@@ -50,8 +64,11 @@ class TestPytestPassGate:
 
     def test_fail_with_wrong_evidence_type(self, locker):
         key = locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff", output="ok", exit_code=0,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff",
+            output="ok",
+            exit_code=0,
         )
         gate = PytestPassGate()
         result = gate.validate([key], locker)
@@ -61,8 +78,11 @@ class TestPytestPassGate:
 class TestLintFailGate:
     def test_pass_with_matching_evidence(self, locker):
         key = locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check src/", output="Found 3 errors", exit_code=1,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check src/",
+            output="Found 3 errors",
+            exit_code=1,
         )
         gate = LintFailGate()
         result = gate.validate([key], locker)
@@ -70,8 +90,11 @@ class TestLintFailGate:
 
     def test_fail_with_wrong_evidence_type(self, locker):
         key = locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         gate = LintFailGate()
         result = gate.validate([key], locker)
@@ -81,8 +104,11 @@ class TestLintFailGate:
 class TestLintPassGate:
     def test_pass_with_matching_evidence(self, locker):
         key = locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check src/", output="All checks passed", exit_code=0,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check src/",
+            output="All checks passed",
+            exit_code=0,
         )
         gate = LintPassGate()
         result = gate.validate([key], locker)

@@ -19,11 +19,11 @@ def run_init(session_id: str) -> str | None:
     node = engine._get_node()
     ctx = f"Governor active: phase={engine.current_phase}. {_describe_blocking(node)}"
 
-    return json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": ctx,
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": ctx,
+            }
         }
-    })
-
-
+    )

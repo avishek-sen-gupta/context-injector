@@ -64,17 +64,17 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
                 output=tool_output,
                 exit_code=exit_code,
             )
-            return json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "additionalContext": (
-                        f"Evidence captured: {key} "
-                        f"(type={rule.evidence_type}, phase={engine.current_phase}). "
-                        f"Use '/governor transition <target> {key}' to request a state transition."
-                    ),
+            return json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": (
+                            f"Evidence captured: {key} "
+                            f"(type={rule.evidence_type}, phase={engine.current_phase}). "
+                            f"Use '/governor transition <target> {key}' to request a state transition."
+                        ),
+                    }
                 }
-            })
+            )
 
     return None
-
-

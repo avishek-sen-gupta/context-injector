@@ -12,7 +12,9 @@ def run_hook(tool_name, tool_input):
     payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
     return subprocess.run(
         ["bash", HOOK],
-        input=payload, capture_output=True, text=True,
+        input=payload,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -49,4 +51,7 @@ class TestPipefailGuard:
         result = run_hook("Bash", {"command": cmd})
         assert result.returncode == 0
         parsed = json.loads(result.stdout)  # must be valid JSON
-        assert parsed["hookSpecificOutput"]["updatedInput"]["command"] == f"set -o pipefail; {cmd}"
+        assert (
+            parsed["hookSpecificOutput"]["updatedInput"]["command"]
+            == f"set -o pipefail; {cmd}"
+        )

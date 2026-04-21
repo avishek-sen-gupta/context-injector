@@ -111,6 +111,10 @@ class TestMultipleEntries:
 
     def test_keys_lists_all_stored(self, tmp_path):
         locker = EvidenceLocker(str(tmp_path), "s1")
-        k1 = locker.store(evidence_type="a", tool_name="Bash", command="cmd1", output="out1")
-        k2 = locker.store(evidence_type="b", tool_name="Bash", command="cmd2", output="out2")
+        k1 = locker.store(
+            evidence_type="a", tool_name="Bash", command="cmd1", output="out1"
+        )
+        k2 = locker.store(
+            evidence_type="b", tool_name="Bash", command="cmd2", output="out2"
+        )
         assert set(locker.keys()) == {k1, k2}

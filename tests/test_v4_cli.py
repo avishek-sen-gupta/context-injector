@@ -175,6 +175,7 @@ class TestCmdInit:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_init import run_init
+
         output = run_init("s1")
         assert output is not None
         parsed = json.loads(output)
@@ -184,6 +185,7 @@ class TestCmdInit:
     def test_init_restore_inactive_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
         from governor_v4.cmd_init import run_init
+
         output = run_init("nonexistent")
         assert output is None
 
@@ -195,6 +197,7 @@ class TestCmdInit:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_init import run_init
+
         output = run_init("s1")
         parsed = json.loads(output)
         ctx = parsed["hookSpecificOutput"]["additionalContext"]
@@ -210,6 +213,7 @@ class TestCmdEvaluate:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_evaluate import run_evaluate
+
         hook_input = {"tool_name": "Read", "tool_input": {"file_path": "main.py"}}
         output = run_evaluate("s1", hook_input)
         assert output is None  # allow = no output
@@ -222,6 +226,7 @@ class TestCmdEvaluate:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_evaluate import run_evaluate
+
         hook_input = {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
         output = run_evaluate("s1", hook_input)
         assert output is not None
@@ -237,6 +242,7 @@ class TestCmdEvaluate:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_evaluate import run_evaluate
+
         hook_input = {"tool_name": "Write", "tool_input": {"file_path": "test_foo.py"}}
         output = run_evaluate("s1", hook_input)
         assert output is None  # exception allows it
@@ -244,6 +250,7 @@ class TestCmdEvaluate:
     def test_evaluate_inactive_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
         from governor_v4.cmd_evaluate import run_evaluate
+
         hook_input = {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
         output = run_evaluate("nonexistent", hook_input)
         assert output is None  # inactive = pass-through
@@ -258,6 +265,7 @@ class TestCmdCapture:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_capture import run_capture
+
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
@@ -277,6 +285,7 @@ class TestCmdCapture:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_capture import run_capture
+
         hook_input = {
             "tool_name": "Read",
             "tool_input": {"file_path": "main.py"},
@@ -293,6 +302,7 @@ class TestCmdCapture:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_capture import run_capture
+
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest tests/"},
@@ -321,6 +331,7 @@ class TestCmdCapture:
         activate_governor("s1", machine_path)
 
         from governor_v4.cmd_capture import run_capture
+
         hook_input = {
             "hook_event_name": "PostToolUseFailure",
             "tool_name": "Bash",
@@ -331,8 +342,11 @@ class TestCmdCapture:
         output = run_capture("s1", hook_input)
         assert output is not None
         parsed = json.loads(output)
-        key = [w for w in parsed["hookSpecificOutput"]["additionalContext"].split()
-               if w.startswith("evt_")][0]
+        key = [
+            w
+            for w in parsed["hookSpecificOutput"]["additionalContext"].split()
+            if w.startswith("evt_")
+        ][0]
 
         engine = load_engine("s1")
         entry = engine.locker.retrieve(key)
@@ -343,6 +357,7 @@ class TestCmdCapture:
     def test_capture_inactive_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
         from governor_v4.cmd_capture import run_capture
+
         hook_input = {
             "tool_name": "Bash",
             "tool_input": {"command": "pytest"},
@@ -356,6 +371,7 @@ class TestCmdPrompt:
     def test_no_governor_command_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
         from governor_v4.cmd_prompt import run_prompt
+
         output = run_prompt("s1", "just a normal prompt")
         assert output is None
 
@@ -365,10 +381,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         output = run_prompt("s1", "/governor tdd")
         assert output is not None
         parsed = json.loads(output)
@@ -382,10 +400,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         run_prompt("s1", "/governor tdd")
         output = run_prompt("s1", "/governor off")
         assert output is not None
@@ -400,10 +420,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         run_prompt("s1", "/governor tdd")
         output = run_prompt("s1", "/governor status")
         assert output is not None
@@ -418,10 +440,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         # Activate and store some evidence
         run_prompt("s1", "/governor tdd")
         engine = load_engine("s1")
@@ -439,10 +463,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         run_prompt("s1", "/governor tdd")
         # No evidence — should deny
         output = run_prompt("s1", "/governor transition fixing_tests")
@@ -456,10 +482,12 @@ class TestCmdPrompt:
         machine_dir.mkdir()
         src = os.path.join(os.path.dirname(__file__), "..", "machines", "tdd_v4.json")
         import shutil
+
         shutil.copy(src, machine_dir / "tdd.json")
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         run_prompt("s1", "/governor tdd")
         engine = load_engine("s1")
         key = engine.locker.store("pytest_output", "Bash", "pytest", "FAILED", 1)
@@ -478,6 +506,7 @@ class TestCmdPrompt:
         monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
 
         from governor_v4.cmd_prompt import run_prompt
+
         output = run_prompt("s1", "/governor nonexistent")
         assert output is not None
         parsed = json.loads(output)

@@ -24,7 +24,7 @@ fi
 # --- END BEADS INTEGRATION v0.62.0 ---
 
 # Auto-format with Black and re-stage any changed files
-uv run black governor_v4 gates tests
+uv run black governor_v4 tests
 git add -u
 
 # Run tests

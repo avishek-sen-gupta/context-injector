@@ -5,29 +5,35 @@ import pytest
 from governor_v4.loader import load_machine_from_json
 from governor_v4.config import MachineConfig
 
-SIMPLE_MACHINE = json.dumps({
-    "name": "tdd",
-    "description": "TDD cycle",
-    "nodes": [
-        {
-            "name": "writing_tests",
-            "initial": True,
-            "blocked_tools": ["Write", "Edit"],
-            "allowed_exceptions": ["Write(test_*)", "Edit(test_*)"],
-            "capture": [
-                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"}
-            ],
-        },
-        {"name": "fixing_tests"},
-    ],
-    "edges": [
-        {
-            "from": "writing_tests", "to": "fixing_tests",
-            "evidence_contract": {"required_type": "pytest_output", "gate": "pytest_fail_gate"},
-        },
-        {"from": "fixing_tests", "to": "writing_tests"},
-    ],
-})
+SIMPLE_MACHINE = json.dumps(
+    {
+        "name": "tdd",
+        "description": "TDD cycle",
+        "nodes": [
+            {
+                "name": "writing_tests",
+                "initial": True,
+                "blocked_tools": ["Write", "Edit"],
+                "allowed_exceptions": ["Write(test_*)", "Edit(test_*)"],
+                "capture": [
+                    {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"}
+                ],
+            },
+            {"name": "fixing_tests"},
+        ],
+        "edges": [
+            {
+                "from": "writing_tests",
+                "to": "fixing_tests",
+                "evidence_contract": {
+                    "required_type": "pytest_output",
+                    "gate": "pytest_fail_gate",
+                },
+            },
+            {"from": "fixing_tests", "to": "writing_tests"},
+        ],
+    }
+)
 
 
 class TestLoadFromString:
@@ -76,19 +82,25 @@ class TestLoadFromFile:
 
 class TestValidation:
     def test_duplicate_nodes(self):
-        bad = json.dumps({
-            "name": "bad", "description": "",
-            "nodes": [{"name": "a", "initial": True}, {"name": "a"}],
-            "edges": [],
-        })
+        bad = json.dumps(
+            {
+                "name": "bad",
+                "description": "",
+                "nodes": [{"name": "a", "initial": True}, {"name": "a"}],
+                "edges": [],
+            }
+        )
         with pytest.raises(ValueError, match="duplicate node"):
             load_machine_from_json(bad)
 
     def test_edge_references_nonexistent_node(self):
-        bad = json.dumps({
-            "name": "bad", "description": "",
-            "nodes": [{"name": "a", "initial": True}],
-            "edges": [{"from": "a", "to": "nonexistent"}],
-        })
+        bad = json.dumps(
+            {
+                "name": "bad",
+                "description": "",
+                "nodes": [{"name": "a", "initial": True}],
+                "edges": [{"from": "a", "to": "nonexistent"}],
+            }
+        )
         with pytest.raises(ValueError, match="nonexistent"):
             load_machine_from_json(bad)

@@ -10,45 +10,65 @@ class TestCheckToolAllowed:
         assert check_tool_allowed("Bash", "ls", blocked=[], exceptions=None)
 
     def test_exact_name_blocks(self):
-        assert not check_tool_allowed("Write", "/main.py", blocked=["Write", "Edit"], exceptions=None)
+        assert not check_tool_allowed(
+            "Write", "/main.py", blocked=["Write", "Edit"], exceptions=None
+        )
 
     def test_exception_overrides_block(self):
-        assert check_tool_allowed("Write", "test_foo.py", blocked=["Write"], exceptions=["Write(test_*)"])
+        assert check_tool_allowed(
+            "Write", "test_foo.py", blocked=["Write"], exceptions=["Write(test_*)"]
+        )
 
     def test_non_matching_exception_stays_blocked(self):
-        assert not check_tool_allowed("Write", "main.py", blocked=["Write"], exceptions=["Write(test_*)"])
+        assert not check_tool_allowed(
+            "Write", "main.py", blocked=["Write"], exceptions=["Write(test_*)"]
+        )
 
     def test_non_blocked_tool_allowed(self):
-        assert check_tool_allowed("Read", "/test.py", blocked=["Write", "Edit"], exceptions=None)
+        assert check_tool_allowed(
+            "Read", "/test.py", blocked=["Write", "Edit"], exceptions=None
+        )
 
     def test_edit_exception_with_path(self):
-        assert check_tool_allowed("Edit", "test_bar.py", blocked=["Edit"], exceptions=["Edit(test_*)"])
+        assert check_tool_allowed(
+            "Edit", "test_bar.py", blocked=["Edit"], exceptions=["Edit(test_*)"]
+        )
 
     def test_edit_blocked_without_matching_exception(self):
-        assert not check_tool_allowed("Edit", "src/auth.py", blocked=["Edit"], exceptions=["Edit(test_*)"])
+        assert not check_tool_allowed(
+            "Edit", "src/auth.py", blocked=["Edit"], exceptions=["Edit(test_*)"]
+        )
 
     def test_exception_matches_absolute_path(self):
         assert check_tool_allowed(
-            "Write", "/Users/dev/project/test_foo.py",
-            blocked=["Write"], exceptions=["Write(test_*)"],
+            "Write",
+            "/Users/dev/project/test_foo.py",
+            blocked=["Write"],
+            exceptions=["Write(test_*)"],
         )
 
     def test_exception_matches_absolute_path_edit(self):
         assert check_tool_allowed(
-            "Edit", "/home/user/code/test_bar.py",
-            blocked=["Edit"], exceptions=["Edit(test_*)"],
+            "Edit",
+            "/home/user/code/test_bar.py",
+            blocked=["Edit"],
+            exceptions=["Edit(test_*)"],
         )
 
     def test_absolute_path_non_test_stays_blocked(self):
         assert not check_tool_allowed(
-            "Write", "/Users/dev/project/src/main.py",
-            blocked=["Write"], exceptions=["Write(test_*)"],
+            "Write",
+            "/Users/dev/project/src/main.py",
+            blocked=["Write"],
+            exceptions=["Write(test_*)"],
         )
 
     def test_absolute_path_nested_test_file(self):
         assert check_tool_allowed(
-            "Write", "/Users/dev/project/tests/test_auth.py",
-            blocked=["Write"], exceptions=["Write(test_*)"],
+            "Write",
+            "/Users/dev/project/tests/test_auth.py",
+            blocked=["Write"],
+            exceptions=["Write(test_*)"],
         )
 
 

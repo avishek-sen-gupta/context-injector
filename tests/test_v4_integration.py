@@ -18,11 +18,15 @@ class TestTDDCycle:
         assert tdd_gov.current_phase == "writing_tests"
 
     def test_blocks_production_write(self, tdd_gov):
-        result = tdd_gov.evaluate(tool_name="Write", tool_input={"file_path": "main.py"})
+        result = tdd_gov.evaluate(
+            tool_name="Write", tool_input={"file_path": "main.py"}
+        )
         assert result["action"] == "block"
 
     def test_allows_test_write(self, tdd_gov):
-        result = tdd_gov.evaluate(tool_name="Write", tool_input={"file_path": "test_auth.py"})
+        result = tdd_gov.evaluate(
+            tool_name="Write", tool_input={"file_path": "test_auth.py"}
+        )
         assert result["action"] == "allow"
 
     def test_allows_read_always(self, tdd_gov):
@@ -32,8 +36,11 @@ class TestTDDCycle:
     def test_full_red_green_refactor_cycle(self, tdd_gov):
         # Red: writing_tests -> fixing_tests (pytest fails)
         key1 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest tests/test_auth.py", output="FAILED test_auth.py::test_login", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest tests/test_auth.py",
+            output="FAILED test_auth.py::test_login",
+            exit_code=1,
         )
         result = tdd_gov.want_to_transition("fixing_tests", key1)
         assert result["action"] == "allow"
@@ -41,8 +48,11 @@ class TestTDDCycle:
 
         # Green: fixing_tests -> refactoring (pytest passes)
         key2 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest tests/test_auth.py", output="1 passed", exit_code=0,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest tests/test_auth.py",
+            output="1 passed",
+            exit_code=0,
         )
         result = tdd_gov.want_to_transition("refactoring", key2)
         assert result["action"] == "allow"
@@ -50,8 +60,11 @@ class TestTDDCycle:
 
         # Refactor: refactoring -> writing_tests (pytest still passes)
         key3 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest tests/", output="5 passed", exit_code=0,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest tests/",
+            output="5 passed",
+            exit_code=0,
         )
         result = tdd_gov.want_to_transition("writing_tests", key3)
         assert result["action"] == "allow"
@@ -60,20 +73,29 @@ class TestTDDCycle:
     def test_refactor_breaks_tests_goes_back(self, tdd_gov):
         # Get to refactoring
         k1 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         tdd_gov.want_to_transition("fixing_tests", k1)
         k2 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="1 passed", exit_code=0,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="1 passed",
+            exit_code=0,
         )
         tdd_gov.want_to_transition("refactoring", k2)
 
         # Refactoring breaks tests -> back to fixing
         k3 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         result = tdd_gov.want_to_transition("fixing_tests", k3)
         assert result["action"] == "allow"
@@ -82,20 +104,29 @@ class TestTDDCycle:
     def test_lint_fail_during_refactor(self, tdd_gov):
         # Get to refactoring
         k1 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         tdd_gov.want_to_transition("fixing_tests", k1)
         k2 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="passed", exit_code=0,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="passed",
+            exit_code=0,
         )
         tdd_gov.want_to_transition("refactoring", k2)
 
         # Lint fails -> fixing_lint
         k3 = tdd_gov.locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check src/", output="Found 3 errors", exit_code=1,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check src/",
+            output="Found 3 errors",
+            exit_code=1,
         )
         result = tdd_gov.want_to_transition("fixing_lint", k3)
         assert result["action"] == "allow"
@@ -103,8 +134,11 @@ class TestTDDCycle:
 
         # Lint fixed -> back to refactoring
         k4 = tdd_gov.locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check src/", output="All checks passed", exit_code=0,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check src/",
+            output="All checks passed",
+            exit_code=0,
         )
         result = tdd_gov.want_to_transition("refactoring", k4)
         assert result["action"] == "allow"
@@ -113,8 +147,11 @@ class TestTDDCycle:
     def test_fixing_tests_back_to_writing(self, tdd_gov):
         # Get to fixing_tests
         k1 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         tdd_gov.want_to_transition("fixing_tests", k1)
 
@@ -125,11 +162,16 @@ class TestTDDCycle:
 
     def test_fixing_tests_allows_all_writes(self, tdd_gov):
         k1 = tdd_gov.locker.store(
-            evidence_type="pytest_output", tool_name="Bash",
-            command="pytest", output="FAILED", exit_code=1,
+            evidence_type="pytest_output",
+            tool_name="Bash",
+            command="pytest",
+            output="FAILED",
+            exit_code=1,
         )
         tdd_gov.want_to_transition("fixing_tests", k1)
-        result = tdd_gov.evaluate(tool_name="Write", tool_input={"file_path": "main.py"})
+        result = tdd_gov.evaluate(
+            tool_name="Write", tool_input={"file_path": "main.py"}
+        )
         assert result["action"] == "allow"
 
 
@@ -141,8 +183,11 @@ class TestTDDDenials:
 
     def test_wrong_evidence_type_denied(self, tdd_gov):
         key = tdd_gov.locker.store(
-            evidence_type="lint_output", tool_name="Bash",
-            command="ruff check", output="errors", exit_code=1,
+            evidence_type="lint_output",
+            tool_name="Bash",
+            command="ruff check",
+            output="errors",
+            exit_code=1,
         )
         result = tdd_gov.want_to_transition("fixing_tests", key)
         assert result["action"] == "deny"
