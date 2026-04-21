@@ -70,6 +70,11 @@ for pair in \
   fi
 done
 
+# --- install /governor command ---
+echo "Installing /governor command..."
+mkdir -p "$PROJECT_DIR/.claude/commands"
+cp "$REPO_ROOT/commands/governor.md" "$PROJECT_DIR/.claude/commands/governor.md"
+
 # --- add Bash permissions (idempotent) ---
 echo "Adding Bash permissions..."
 jq '.permissions.allow = ((.permissions.allow // []) + ["Bash(mkdir:/tmp/ctx-governor)", "Bash(touch:/tmp/ctx-governor/*)", "Bash(rm:/tmp/ctx-governor/*)"] | unique)' \
