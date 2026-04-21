@@ -21,28 +21,6 @@ All tools are independent and can be installed/enabled simultaneously.
 
 The governor is a guardrail system for Claude Code. It enforces workflow discipline by controlling **what the agent can do** at each phase and requiring **proof of work** before allowing phase transitions.
 
-Think of it as a traffic cop sitting between Claude and its tools:
-
-```mermaid
-flowchart TD
-    A["You: 'Add a login feature using TDD'"] --> B
-
-    subgraph B["Governor: phase = writing_tests"]
-        B1["✅ Write('test_login.py') — test file, allowed"]
-        B2["🚫 Write('auth.py') — production file, BLOCKED"]
-        B3["✅ Read('auth.py') — reading is always fine"]
-        B4["✅ Bash('pytest') — captured as evidence"]
-    end
-
-    B --> C["Tests fail — evidence captured<br/>Agent requests transition<br/>Governor checks evidence"]
-    C --> D
-
-    subgraph D["Governor: phase = fixing_tests"]
-        D1["✅ Write('auth.py') — now allowed"]
-        D2["✅ Write('test_login.py') — still allowed"]
-    end
-```
-
 ### The TDD cycle
 
 The built-in TDD machine enforces red-green-refactor with four phases:
@@ -76,6 +54,30 @@ Each arrow is a **transition** that requires evidence. The agent must actually r
 | `refactoring` | `fixing_tests` | `pytest_output` | `pytest_fail_gate` |
 | `refactoring` | `fixing_lint` | `lint_output` | `lint_fail_gate` |
 | `fixing_lint` | `refactoring` | `lint_output` | `lint_pass_gate` |
+
+### How tool blocking works
+
+Think of the governor as a traffic cop sitting between Claude and its tools:
+
+```mermaid
+flowchart TD
+    A["You: 'Add a login feature using TDD'"] --> B
+
+    subgraph B["Governor: phase = writing_tests"]
+        B1["✅ Write('test_login.py') — test file, allowed"]
+        B2["🚫 Write('auth.py') — production file, BLOCKED"]
+        B3["✅ Read('auth.py') — reading is always fine"]
+        B4["✅ Bash('pytest') — captured as evidence"]
+    end
+
+    B --> C["Tests fail — evidence captured<br/>Agent requests transition<br/>Governor checks evidence"]
+    C --> D
+
+    subgraph D["Governor: phase = fixing_tests"]
+        D1["✅ Write('auth.py') — now allowed"]
+        D2["✅ Write('test_login.py') — still allowed"]
+    end
+```
 
 ### How transitions work
 
