@@ -31,14 +31,24 @@ def _available_machines() -> list[str]:
     ]
 
 
-def run_prompt(session_id: str, prompt: str) -> str | None:
-    """Parse /governor command from prompt. Returns hook JSON or None."""
-    line = None
+_EXPANDED_PREFIX = "The Governor workflow enforcer has been invoked with:"
+
+
+def _extract_command(prompt: str) -> str | None:
+    """Extract governor command line from raw or expanded prompt."""
     for l in prompt.splitlines():
         stripped = l.strip()
         if stripped.startswith("/governor"):
-            line = stripped
-            break
+            return stripped
+        if stripped.startswith(_EXPANDED_PREFIX):
+            args = stripped[len(_EXPANDED_PREFIX):].strip()
+            return f"/governor {args}" if args else "/governor"
+    return None
+
+
+def run_prompt(session_id: str, prompt: str) -> str | None:
+    """Parse /governor command from prompt. Returns hook JSON or None."""
+    line = _extract_command(prompt)
 
     if not line:
         return None

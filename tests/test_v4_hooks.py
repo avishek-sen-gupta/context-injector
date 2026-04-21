@@ -127,3 +127,65 @@ class TestFullCycle:
         # 9. Deactivate
         output = run_prompt("s1", "/governor off")
         assert not is_governor_active("s1")
+
+    def test_expanded_command_activates(self, tmp_path, monkeypatch):
+        """Slash command expansion produces different text — hook must parse it."""
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+
+        # This is what Claude Code sends after expanding commands/governor.md
+        expanded = (
+            "The Governor workflow enforcer has been invoked with: tdd\n\n"
+            "This command is handled automatically by the UserPromptSubmit hook."
+        )
+        output = run_prompt("s2", expanded)
+        assert output is not None
+        ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
+        assert "writing_tests" in ctx
+
+    def test_expanded_command_status(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cmd_prompt import run_prompt
+
+        # Activate first
+        run_prompt("s3", "/governor tdd")
+
+        # Status via expanded format
+        expanded = "The Governor workflow enforcer has been invoked with: status"
+        output = run_prompt("s3", expanded)
+        assert output is not None
+        ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
+        assert "writing_tests" in ctx
+
+    def test_expanded_command_off(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("governor_v4.cli._STATE_ROOT", str(tmp_path))
+        machine_dir = tmp_path / "machines"
+        machine_dir.mkdir()
+        src = os.path.join(REPO_ROOT, "machines", "tdd_v4.json")
+        import shutil
+        shutil.copy(src, machine_dir / "tdd.json")
+        monkeypatch.setattr("governor_v4.cmd_prompt._MACHINE_DIR", str(machine_dir))
+
+        from governor_v4.cli import is_governor_active
+        from governor_v4.cmd_prompt import run_prompt
+
+        run_prompt("s4", "/governor tdd")
+        assert is_governor_active("s4")
+
+        expanded = "The Governor workflow enforcer has been invoked with: off"
+        run_prompt("s4", expanded)
+        assert not is_governor_active("s4")
