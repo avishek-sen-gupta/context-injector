@@ -3,11 +3,11 @@
 [![CI](https://github.com/avishek-sen-gupta/context-injector/actions/workflows/ci.yml/badge.svg)](https://github.com/avishek-sen-gupta/context-injector/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
-A Claude Code plugin that governs agent behavior during development workflows. It enforces discipline — blocking tools that shouldn't be used, advancing state based on real signals (like test results), injecting the right context at the right time, and producing an audit trail of every decision.
+A Claude Code plugin that governs agent behavior during development workflows. It enforces discipline — blocking tools that shouldn't be used, requiring evidence before state transitions, and producing an audit trail of every decision.
 
 Three modes, from lightweight to full enforcement:
 
-1. **Governor** (`/governor`) — a state machine that enforces workflow phases, blocks disallowed tools, transitions automatically on pytest results, and injects state-specific context
+1. **Governor** (`/governor`) — an evidence-based state machine that enforces workflow phases, blocks disallowed tools, captures tool output as evidence, and validates transitions via gates
 2. **Context Injection** (`/ctx`) — keyword-based context injection without enforcement, for projects that want guidance without guardrails
 3. **Beads Terminology Guard** — a PreToolUse hook that blocks Beads issue-tracker commands containing sensitive terminology
 
@@ -17,275 +17,139 @@ All modes are independent and can be installed/enabled simultaneously.
 
 ## Governor
 
-The governor wraps Claude Code in a state machine. Every tool call is evaluated against the current workflow phase. Tools that violate the phase are blocked or challenged. Transitions happen automatically based on real signals — not declarations.
+The governor wraps Claude Code in an evidence-based state machine. Every tool call is evaluated against the current workflow phase. Tools that violate the phase are blocked. The agent decides when to transition and provides evidence — the governor validates that evidence via gates before allowing the transition.
 
 ### Commands
 
 | Command | Effect |
 |---|---|
 | `/governor tdd` | Enable with the TDD state machine |
-| `/governor feature` | Enable with Feature Development machine |
 | `/governor off` | Disable |
-| `/governor status` | Show current machine and state (JSON) |
-| `/governor trigger <event>` | Fire a named transition (e.g. `add_tests`) |
+| `/governor status` | Show current phase, blocked tools, and available transitions |
+| `/governor transition <target> [evidence_key]` | Request transition to a target state with evidence |
+| `/governor evidence` | List all captured evidence entries |
 
 ### How it works
 
-1. **SessionStart** (`session-start.sh`) — initializes the state machine, injects core context and workflow instructions
-2. **PreToolUse** (`governor-hook.sh`) — evaluates every tool call against the current state's rules; blocks disallowed tools; scans the conversation transcript for unprocessed pytest results
-3. **PostToolUse** (`post-tool-use.sh`) — detects pytest pass/fail from Bash tool output and fires state transitions
-4. **PreCompact** (`pre-compact.sh`) — re-injects state context and workflow instructions before conversation compaction so invariants survive compression
+1. **SessionStart** (`session-start.sh`) — restores governor state if a session is active
+2. **PreToolUse** (`pre-tool-use.sh`) — evaluates every tool call against the current phase's rules; blocks disallowed tools
+3. **PostToolUse** (`post-tool-use.sh`) — captures tool output as evidence when it matches a node's capture rules
+4. **UserPromptSubmit** (`user-prompt-submit.sh`) — parses `/governor` commands from user prompts
+
+All hooks are thin shell scripts that check `CLAUDE_SESSION_ID` and a lock file (`/tmp/ctx-governor/<session>/active`) before delegating to `python3 -m governor_v4`.
+
+### Evidence-based transitions
+
+Unlike traditional state machines where transitions fire automatically on events, the governor requires the agent to:
+
+1. **Do the work** — run pytest, run linters, etc.
+2. **Evidence is captured** — the PostToolUse hook stores matching tool output in an evidence locker
+3. **Request a transition** — `/governor transition <target> <evidence_key>`
+4. **Gate validates** — the edge's evidence contract specifies a gate that inspects the evidence and decides pass/fail
+
+This means transitions are grounded in real tool output, not declarations.
 
 ### Tool blocking
 
-The governor uses a **blocklist** approach — tools not listed are allowed. Each state defines which tools are blocked, with `!` prefix exceptions:
+The governor uses a **blocklist** approach — tools not listed are allowed. Each state defines which tools are blocked, with exceptions using `ToolName(glob_pattern)` syntax:
 
 | State | Blocked | Exceptions |
 |---|---|---|
-| `writing_tests` | `Write`, `Edit` | `!Write(test_*)`, `!Edit(test_*)` |
-| `red` | `Write`, `Edit` | — |
+| `writing_tests` | `Write`, `Edit` | `Write(test_*)`, `Edit(test_*)` |
 | `fixing_tests` | *(none)* | — |
-| `green` | `Write`, `Edit` | — |
-| `linting` | `Write`, `Edit` | — |
+| `refactoring` | *(none)* | — |
 | `fixing_lint` | *(none)* | — |
 
 Non-destructive tools (`Read`, `Grep`, `Glob`, `Agent`, `Bash`, etc.) are always allowed.
 
-### Graduated response
+### Evidence capture
 
-When a tool violates the current state's rules, the governor doesn't always hard-block. It applies a **graduated response** based on the transition's softness value (0.0–1.0):
+Each node defines **capture rules** that match tool output and store it in the evidence locker:
 
-| Softness | Action | Behavior |
-|---|---|---|
-| >= 0.7 | allow | Proceeds silently |
-| 0.3–0.7 | remind | Proceeds with a deviation warning |
-| < 0.3 | challenge | Proceeds but Claude is asked to justify |
-
-This means the governor can be strict where it matters (e.g., no production code during test-writing) and lenient where rigid enforcement would slow things down.
-
-### Transition guards (gates)
-
-Gates are transition guards that inspect the work done during the current state and return a verdict. There are three types:
-
-- **`GUARDS`** — keyed by event name; run when a specific transition is about to fire
-- **`EXIT_GUARDS`** — keyed by state name; run before *any* transition out of that state
-- **`CHECK_STATES`** — keyed by state name; run on entry to a state, with pass/fail events that pick the next transition
-
-Each gate returns a verdict:
-
-| Verdict | Behavior |
-|---|---|
-| `PASS` | Transition proceeds |
-| `FAIL` | Blocked per gate softness (graduated response) |
-| `REVIEW` | Injects a review prompt — agent must self-review, then retry |
-
-**Built-in gates:**
-
-#### TestQualityGate
-
-Exit guard on `writing_tests` in the TDD machine. Prevents leaving the test-writing phase until tests are structurally valid. Uses Python AST analysis to inspect every `test_*` function in recently touched test files.
-
-**Hard violations** (verdict: `FAIL` — blocks the transition):
-
-| Rule | What it catches |
-|---|---|
-| `no_assertions` | Test function contains no `assert` statements and no `pytest.raises` context manager |
-| `trivial_assertion` | `assert True`, `assert 1`, or any `assert <literal>` that can never fail |
-| `skip_abuse` | `pytest.skip()` call inside a test body — tests must not skip themselves |
-| `xfail_abuse` | `@pytest.mark.xfail` decorator or `pytest.xfail()` call — expected failures are not real tests |
-
-**Soft violations** (verdict: `REVIEW` — agent must self-review, then retry):
-
-| Rule | What it catches |
-|---|---|
-| `none_only` | Every assertion in the function only checks `is None` / `is not None` — no value comparisons |
-| `membership_only` | Every assertion only checks `in` / `not in` without verifying actual values |
-| `type_only` | Every assertion only checks `isinstance()` without verifying actual values |
-| `import_overlap` | Same production function called on both sides of `==` (e.g. `assert f(x) == f(x)`) — test proves nothing |
-
-#### LintGate
-
-Runs on entry to the `linting` state. Uses a **dual-backend** architecture: [Semgrep](https://semgrep.dev/) (required, 26 rules) runs first, then [ast-grep](https://ast-grep.github.io/) (optional, 2 rules) for rules that require tree-sitter-specific features (`stopBy`). Results are merged into a single violation list. Blocks the transition if any violations are found. Fails if Semgrep is not installed; passes gracefully if ast-grep is missing.
-
-Semgrep rules are in `scripts/lint/semgrep-rules.yml`; ast-grep rules are in `scripts/lint/rules/*.yml`. The current rule set (28 rules) enforces immutable-style Python:
-
-| Rule | What it blocks |
-|---|---|
-| `no-list-append` | `list.append()` — build lists via comprehensions or `[*old, new]` |
-| `no-list-extend` | `list.extend()` — use `[*a, *b]` |
-| `no-list-insert` | `list.insert()` — use slicing or rebuild |
-| `no-list-pop` | `list.pop()` — destructure or slice instead |
-| `no-list-remove` | `list.remove()` — filter instead |
-| `no-dict-update` | `dict.update()` — use `{**old, **new}` |
-| `no-dict-clear` | `dict.clear()` — rebind to `{}` |
-| `no-dict-setdefault` | `dict.setdefault()` — use `{**old, key: val}` or comprehension |
-| `no-set-add` | `set.add()` — use `{*old, new}` |
-| `no-set-discard` | `set.discard()` — use set difference |
-| `no-setitem-call` | `obj.__setitem__()` — use spread or comprehension |
-| `no-subscript-mutation` | `d[k] = v` — use spread or comprehension |
-| `no-subscript-del` | `del d[k]` — filter or rebuild |
-| `no-subscript-tuple-mutation` | Tuple subscript assignment (e.g. `t[0] = v`) |
-| `no-subscript-augmented-mutation` | `d[k] += v` — augmented assignment via subscript |
-| `no-attribute-augmented-mutation` | `obj.attr += v` — augmented assignment via attribute |
-| `no-local-augmented-mutation` | `x += v` — augmented assignment on local variables |
-| `no-is-none` | `x is None` — use explicit comparison patterns |
-| `no-is-not-none` | `x is not None` — use explicit comparison patterns |
-| `no-none-default-param` | `def f(x=None)` — use sentinel or overload |
-| `no-bare-except` | `except:` without an exception type |
-| `no-except-exception` | `except Exception:` — catch specific exceptions |
-| `no-print` | `print()` — use logging |
-| `no-relative-import` | `from . import` — use absolute imports |
-| `no-static-method` | `@staticmethod` — use module-level functions |
-| `no-optional-none` | `Optional[T]`, `T | None`, `Union[T, None]` — use sentinel values or separate code paths |
-| `no-deep-nesting` | *(ast-grep)* Any `for`/`if` nested inside another `for`/`if` (depth 2+) — use comprehensions, `itertools`, or extract a helper. Stops at function boundaries so nested `def`s don't false-positive. |
-| `no-loop-mutation` | *(ast-grep)* Any mutation call inside a `for` body — append, extend, insert, pop, remove, add, discard, clear, update, setdefault, subscript assignment, `del`, augmented assignment. Use comprehensions, `reduce`, or functional patterns. Stops at function boundaries. |
-
-Rules are project-local (`scripts/lint/`) by default; falls back to the plugin's installed copy via `config.json`.
-
-#### ReassignmentGate
-
-Runs on entry to the `linting` state alongside LintGate. Uses [beniget](https://github.com/serge-sans-paille/beniget) def-use chain analysis to detect variables or parameters assigned more than once within the same scope. Catches rebinding that structural pattern matching (ast-grep) cannot detect.
-
-**What it flags:** Any name that has more than one definition within the same scope (function, class, or module). For example:
-
-```python
-# Flagged: 'result' defined twice in the same function
-def process(items):
-    result = compute(items)
-    result = transform(result)  # ← reassignment violation
-    return result
+```json
+"capture": [
+    {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"},
+    {"tool_pattern": "Bash(ruff*)", "evidence_type": "lint_output"}
+]
 ```
 
-Imports, function definitions, and class definitions are excluded — only value-binding assignments are checked.
+When a tool call matches a capture rule, the PostToolUse hook stores the output with a unique key (e.g., `evt_abc123`) and injects a message telling the agent how to use it for a transition.
 
-Machines register gates via `GUARDS`, `EXIT_GUARDS`, `GATE_SOFTNESS`, and `CHECK_STATES`:
+### Evidence contracts and gates
 
-```python
-GUARDS = {
-    "pytest_fail": [SomeGate],        # runs when pytest_fail fires
-}
-EXIT_GUARDS = {
-    "writing_tests": [TestQualityGate],  # must pass before leaving writing_tests
-}
-GATE_SOFTNESS = {
-    "test_quality": 0.1,   # Strict — override per project
-}
-# CHECK_STATES: gates that run on entry to a state, with pass/fail events
-CHECK_STATES = {
-    "linting": {
-        "gate": [LintGate, ReassignmentGate],  # multiple gates supported
-        "pass_event": "lint_pass",
-        "fail_event": "lint_fail",
-    },
-}
+Each edge can define an **evidence contract** — what type of evidence is required and which gate validates it:
+
+```json
+{"from": "writing_tests", "to": "fixing_tests",
+ "evidence_contract": {"required_type": "pytest_output", "gate": "pytest_fail_gate"}}
 ```
 
-**Audit queries:**
+Built-in gates:
 
-```bash
-governor audit --gate test_quality --verdict fail
-governor audit --type gate_eval --limit 20
-governor audit --all
-```
+| Gate | What it checks |
+|---|---|
+| `pytest_pass_gate` | Evidence contains pytest output with all tests passing (exit code 0) |
+| `pytest_fail_gate` | Evidence contains pytest output with test failures (exit code non-zero) |
+| `lint_pass_gate` | Evidence contains linter output with no violations (exit code 0) |
+| `lint_fail_gate` | Evidence contains linter output with violations (exit code non-zero) |
+
+Edges without an evidence contract allow free transitions (no evidence required).
 
 ### TDD cycle
 
-The default machine enforces a strict red-green-lint TDD loop:
+The default TDD machine enforces a red-green-refactor loop:
 
 ```
-writing_tests → (pytest fails) → red → (auto) → fixing_tests
-      ↑                                               ↓
-      ├──── (lint pass) ← linting ← green ← (pytest passes)
-      │                      ↓
-      ├── (lint pass) ← fixing_lint ← (lint fail)
-      │
-      └── (add_tests) ←── fixing_tests  [voluntary]
+writing_tests → (pytest fails) → fixing_tests
+      ↑                              ↓
+      ├── (pytest pass) ←── refactoring ← (pytest passes)
+      │                          ↓
+      └──────────────── fixing_lint ← (lint fails)
+                            ↓
+                     (lint passes) → refactoring
 ```
 
-- **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited.
-- **red**: Transient — auto-advances to `fixing_tests`.
-- **fixing_tests**: Write production code to make tests pass. All files editable. Say "I want to add more tests" or use `/governor trigger add_tests` to return to writing tests.
-- **green**: Transient — auto-advances to `linting`.
-- **linting**: Transient — runs LintGate and ReassignmentGate on modified files. Auto-advances to `writing_tests` (clean) or `fixing_lint` (violations).
-- **fixing_lint**: Fix lint violations. All files editable. Returns to `writing_tests` when lint passes.
-
-Transitions are **automatic** — driven by pytest results, not manual declarations. The one exception is `add_tests`, a voluntary transition from `fixing_tests` back to `writing_tests` — triggered by asking the LLM to add more tests, or via `/governor trigger add_tests`.
-
-### Pytest detection
-
-The governor detects pytest results through two mechanisms:
-
-1. **PostToolUse hook**: Fires after successful Bash commands (`exit 0`). Parses tool output for pytest summary patterns (`FAILED`, `passed`, etc.) and triggers state transitions.
-2. **Transcript scanning** (PreToolUse fallback): PostToolUse hooks don't fire for non-zero Bash exit codes, so pytest failures (`exit 1`) and collection errors (`exit 2`) are invisible to PostToolUse. The governor scans the Claude Code conversation transcript (JSONL) on every PreToolUse call, looking for unprocessed pytest results. A marker file prevents re-processing.
-
-### Built-in machines
-
-**TDD** (`machines.tdd.TDD`) — the default:
-- States: `writing_tests` → `red` → `fixing_tests` → `green` → `linting` → `writing_tests` (with `fixing_lint` on violations)
-- Pytest-driven transitions with auto-advancing transient states
-- Blocklist-based tool restrictions
-- LintGate + ReassignmentGate run automatically when tests pass
-
-**FeatureDevelopment** (`machines.feature_development.FeatureDevelopment`):
-- States: `planning` → `implementing` → `reviewing` → `committing`
+- **writing_tests** (start): Write failing tests. Only `test_*` files can be created/edited. Captures pytest output.
+- **fixing_tests**: Write production code to make tests pass. All files editable. Captures pytest and lint output.
+- **refactoring**: Clean up code with passing tests. All files editable. Captures pytest and lint output.
+- **fixing_lint**: Fix lint violations. Captures lint output.
 
 ### Defining custom machines
 
-Create a Python class extending `GovernedMachine`:
+Machines are JSON files placed in `machines/` and deployed to `~/.claude/plugins/guvnah/machines/`:
 
-```python
-from statemachine import State
-from machines.base import GovernedMachine
-
-class MyWorkflow(GovernedMachine):
-    step_a = State(initial=True)
-    step_b = State()
-
-    advance = step_a.to(step_b)
-
-    SOFTNESS = {"advance": 1.0}
-    CONTEXT = {
-        "step_a": ["core/*"],
-        "step_b": ["conditional/review.md"],
-    }
-    BLOCKED_TOOLS = {
-        "step_a": ["Write", "Edit"],
-        "step_b": [],
-    }
-    # Optional: auto-advance transient states
-    AUTO_TRANSITIONS = {
-        "step_b": "some_event",
-    }
-    # Optional: gates that must pass before leaving a state
-    EXIT_GUARDS = {
-        "step_a": [MyGate],
-    }
-    # Optional: require tools to have been used before a transition
-    PRECONDITIONS = {
-        "advance": ["Bash(pytest*)"],
-    }
+```json
+{
+    "name": "my-workflow",
+    "description": "Custom workflow",
+    "nodes": [
+        {
+            "name": "step_a",
+            "initial": true,
+            "blocked_tools": ["Write", "Edit"],
+            "allowed_exceptions": ["Write(test_*)"],
+            "capture": [
+                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"}
+            ]
+        },
+        {"name": "step_b"}
+    ],
+    "edges": [
+        {
+            "from": "step_a", "to": "step_b",
+            "evidence_contract": {"required_type": "pytest_output", "gate": "pytest_fail_gate"}
+        },
+        {
+            "from": "step_b", "to": "step_a",
+            "evidence_contract": null
+        }
+    ]
+}
 ```
 
-Place it in `machines/` and set `CTX_MACHINE` to its dotted path (e.g., `machines.my_workflow.MyWorkflow`).
+### State persistence
 
-### Audit trail
-
-Each governor evaluation is stored in a TinyDB document database at `$CTX_AUDIT_DIR/<session_id>.audit.json`. Documents include: timestamp, from/to state, trigger type, softness, action taken, tool name, and gate evaluation results.
-
-Query the audit trail via `governor audit` — see Transition guards section above.
-
-### Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `CTX_MACHINE` | `machines.tdd.TDD` | Dotted path to the state machine class |
-| `CTX_STATE_DIR` | `/tmp/ctx-state` | Directory for persisted state files |
-| `CTX_AUDIT_DIR` | `$PWD/.claude/audit` | Directory for JSONL audit logs |
-| `CTX_CONTEXT_DIR` | `$PWD/.claude` | Base directory for context file resolution |
-| `CTX_PROJECT_HASH` | md5 of `$PWD` | Unique identifier for the project |
-
-
-LintGate reads its rules path from `~/.claude/plugins/context-injector/config.json` (written by the installer). Project-local `scripts/lint/` takes priority if present.
+Governor state is persisted to `/tmp/ctx-governor/<session_id>/` as JSON files. The evidence locker stores captured tool output alongside the state. State survives across hook invocations within a session.
 
 ## Context Injection (lightweight mode)
 
@@ -336,7 +200,7 @@ All three modes use **separate lock files / hooks** and can be enabled independe
 | Mode | Command | Hook events |
 |---|---|---|
 | Context Injection | `/ctx on\|off` | `UserPromptSubmit` |
-| Governor | `/governor tdd\|off\|status` | `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact` |
+| Governor | `/governor tdd\|off\|status` | `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit` |
 | Beads Terminology Guard | `install-bd-guard.sh` / `uninstall-bd-guard.sh` | `PreToolUse` |
 | Git Terminology Guard | `install-terminology-guard.sh` / `uninstall-terminology-guard.sh` | git pre-commit hook |
 
@@ -345,10 +209,8 @@ When multiple modes are active they don't conflict — each operates on its own 
 ## Requirements
 
 - [Claude Code](https://claude.ai/code) with a project that has a `.claude/` directory
+- Python 3.10+ (governor only — no external runtime dependencies)
 - `jq` (for the automated installers)
-- Python 3 with `python-statemachine>=3.0.0`, `tinydb>=4.0.0`, and `beniget>=0.5.0` (governor only)
-- [Semgrep](https://semgrep.dev/) — required for LintGate (26 rules); `pip install semgrep`
-- [ast-grep](https://ast-grep.github.io/) (`sg`) — optional, for 2 LintGate rules (`no-deep-nesting`, `no-loop-mutation`); gate passes silently if not installed
 
 ## Development Setup
 
@@ -365,25 +227,23 @@ uv sync --dev
 uv run pytest tests/ -v
 ```
 
-The development environment (`.venv/` managed by uv) is independent of the hook deployment. Contributors use `uv sync --dev` for local testing; end users run `install-governor.sh` which checks that runtime deps are available in the system Python.
+The development environment (`.venv/` managed by uv) is independent of the hook deployment. Contributors use `uv sync --dev` for local testing; end users run `hooks/guvnah/install.sh` to deploy.
 
 ## Installation
 
 ### Governor
 
 ```bash
-cd /path/to/your/project
-/path/to/context-injector/install-governor.sh
+/path/to/context-injector/hooks/guvnah/install.sh
 ```
 
 Installs:
-- Governor hooks (`governor-hook.sh`, `session-start.sh`, `post-tool-use.sh`, `pre-compact.sh`) → `~/.claude/plugins/context-injector/hooks/`
-- Governor Python code and machine definitions → `~/.claude/plugins/context-injector/`
-- `/governor` command → `~/.claude/commands/`
-- Wires `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact` hooks in `.claude/settings.json`
-- Adds `/tmp/ctx-governor` Bash permissions
+- Governor hooks (`session-start.sh`, `pre-tool-use.sh`, `post-tool-use.sh`, `user-prompt-submit.sh`) → `~/.claude/plugins/guvnah/hooks/`
+- Machine definitions (`tdd.json`, etc.) → `~/.claude/plugins/guvnah/machines/`
 
-Uninstall: `/path/to/context-injector/uninstall-governor.sh`
+After installation, add hook entries to your project's `.claude/settings.json` (the installer prints the exact JSON).
+
+Uninstall: `/path/to/context-injector/hooks/guvnah/uninstall.sh`
 
 ### Context Injection
 
@@ -452,48 +312,39 @@ All scripts are idempotent — safe to run multiple times.
 
 **1. Copy hooks:**
 ```bash
-mkdir -p ~/.claude/plugins/context-injector/hooks/lib
-cp hooks/lib/hash.sh ~/.claude/plugins/context-injector/hooks/lib/
-for f in governor-hook.sh session-start.sh post-tool-use.sh pre-compact.sh; do
-  cp "hooks/$f" ~/.claude/plugins/context-injector/hooks/
-  chmod +x ~/.claude/plugins/context-injector/hooks/"$f"
+mkdir -p ~/.claude/plugins/guvnah/hooks
+for f in session-start.sh pre-tool-use.sh post-tool-use.sh user-prompt-submit.sh; do
+  cp "hooks/guvnah/$f" ~/.claude/plugins/guvnah/hooks/
+  chmod +x ~/.claude/plugins/guvnah/hooks/"$f"
 done
 ```
 
-**2. Copy governor, machines, gates, and lint rules:**
+**2. Copy governor code and machines:**
 ```bash
-mkdir -p ~/.claude/plugins/context-injector/{governor,machines,gates,scripts/lint/rules}
-cp governor/*.py ~/.claude/plugins/context-injector/governor/
-cp machines/*.py ~/.claude/plugins/context-injector/machines/
-cp gates/*.py ~/.claude/plugins/context-injector/gates/
-cp scripts/lint/sgconfig.yml ~/.claude/plugins/context-injector/scripts/lint/
-cp scripts/lint/rules/*.yml ~/.claude/plugins/context-injector/scripts/lint/rules/
+mkdir -p ~/.claude/plugins/guvnah/{governor_v4,machines}
+cp governor_v4/*.py ~/.claude/plugins/guvnah/governor_v4/
+cp machines/*.json ~/.claude/plugins/guvnah/machines/
 ```
 
-**3. Copy command:**
-```bash
-cp commands/governor.md ~/.claude/commands/governor.md
-```
-
-**4. Wire in `.claude/settings.json`:**
+**3. Wire in `.claude/settings.json`:**
 ```json
 "hooks": {
   "SessionStart": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/session-start.sh"}]}
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/session-start.sh"}]}
   ],
   "PreToolUse": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/governor-hook.sh"}]}
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/pre-tool-use.sh"}]}
   ],
   "PostToolUse": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/post-tool-use.sh"}]}
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/post-tool-use.sh"}]}
   ],
-  "PreCompact": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/context-injector/hooks/pre-compact.sh"}]}
+  "UserPromptSubmit": [
+    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/user-prompt-submit.sh"}]}
   ]
 }
 ```
 
-**5. Add permissions:**
+**4. Add permissions:**
 ```json
 "Bash(mkdir:/tmp/ctx-governor)",
 "Bash(touch:/tmp/ctx-governor/*)",
