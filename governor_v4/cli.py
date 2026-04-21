@@ -3,16 +3,25 @@
 
 import json
 import os
+import re
 import shutil
 
 from governor_v4.engine import GovernorV4
 from governor_v4.loader import load_machine_from_json
 
 _STATE_ROOT = "/tmp/ctx-governor"
+_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_session_id(session_id: str) -> None:
+    """Reject empty or path-traversal-prone session IDs."""
+    if not session_id or not _SESSION_ID_RE.match(session_id):
+        raise ValueError(f"Invalid session ID: {session_id!r}")
 
 
 def get_state_dir(session_id: str) -> str:
     """Return the state directory for a session."""
+    _validate_session_id(session_id)
     return os.path.join(_STATE_ROOT, session_id)
 
 

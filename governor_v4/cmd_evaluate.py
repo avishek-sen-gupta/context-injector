@@ -35,7 +35,10 @@ def run(args: list[str]) -> None:
         print("error: --session required", file=sys.stderr)
         sys.exit(1)
 
-    hook_input = json.loads(sys.stdin.read())
+    try:
+        hook_input = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError):
+        return  # fail open — allow the tool call
     output = run_evaluate(session_id, hook_input)
     if output:
         print(output)

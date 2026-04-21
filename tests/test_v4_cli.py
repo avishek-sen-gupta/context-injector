@@ -13,6 +13,30 @@ from governor_v4.cli import (
 from governor_v4.primitives import match_capture_rule
 
 
+class TestSessionIdValidation:
+    def test_valid_alphanumeric(self):
+        get_state_dir("abc123")  # should not raise
+
+    def test_valid_with_dashes_underscores(self):
+        get_state_dir("my-session_01")  # should not raise
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="Invalid session ID"):
+            get_state_dir("")
+
+    def test_slash_raises(self):
+        with pytest.raises(ValueError, match="Invalid session ID"):
+            get_state_dir("../../etc")
+
+    def test_dot_dot_raises(self):
+        with pytest.raises(ValueError, match="Invalid session ID"):
+            get_state_dir("test/../escape")
+
+    def test_space_raises(self):
+        with pytest.raises(ValueError, match="Invalid session ID"):
+            get_state_dir("has space")
+
+
 class TestStateDir:
     def test_state_dir_uses_session_hash(self):
         d = get_state_dir("abc123")

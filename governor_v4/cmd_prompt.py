@@ -139,7 +139,10 @@ def run(args: list[str]) -> None:
         print("error: --session required", file=sys.stderr)
         sys.exit(1)
 
-    stdin_data = json.loads(sys.stdin.read())
+    try:
+        stdin_data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError):
+        return  # fail open — no command to parse
     prompt = stdin_data.get("prompt", "")
     output = run_prompt(session_id, prompt)
     if output:
