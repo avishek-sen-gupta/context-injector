@@ -123,7 +123,7 @@ Claude runs Bash("python3 -m pytest tests/ -v") and it completes
     → check lock file exists, else exit 0
     → python3 -m governor_v4 capture --session <session_id> < stdin
       → stdin: {"tool_name": "Bash", "tool_input": {"command": "python3 -m pytest ..."},
-          "tool_response": {"output": "FAILED 2 passed, 1 failed", "exit_code": 1}}
+          "tool_response": {"stdout": "FAILED 2 passed, 1 failed", "stderr": ""}}
       → load engine, get current node's capture rules
       → match_capture_rule("Bash", "python3 -m pytest ...", "Bash(*pytest*)")
         → fnmatch "python3 -m pytest ..." against "*pytest*" → MATCH

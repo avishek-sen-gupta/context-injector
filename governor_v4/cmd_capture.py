@@ -16,11 +16,11 @@ def run_capture(session_id: str, hook_input: dict) -> str | None:
     tool_input = hook_input.get("tool_input", {})
     tool_response = hook_input.get("tool_response", {})
 
-    # tool_response is an object for Bash ({output, exit_code})
-    # or a string/object for other tools
+    # tool_response is an object for Bash ({stdout, stderr, interrupted, ...})
+    # or a string/object for other tools — no exit_code field exists
     if isinstance(tool_response, dict):
-        tool_output = tool_response.get("output", "")
-        exit_code = tool_response.get("exit_code")
+        tool_output = tool_response.get("stdout", "")
+        exit_code = None
     else:
         tool_output = str(tool_response) if tool_response else ""
         exit_code = None
