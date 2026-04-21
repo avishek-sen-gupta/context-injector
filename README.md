@@ -234,7 +234,7 @@ The development environment (`.venv/` managed by uv) is independent of the hook 
 ### Governor
 
 ```bash
-/path/to/context-injector/hooks/guvnah/install.sh
+/path/to/context-injector/install-guvnah.sh
 ```
 
 Installs:
@@ -243,7 +243,7 @@ Installs:
 
 After installation, add hook entries to your project's `.claude/settings.json` (the installer prints the exact JSON).
 
-Uninstall: `/path/to/context-injector/hooks/guvnah/uninstall.sh`
+Uninstall: `/path/to/context-injector/uninstall-guvnah.sh`
 
 ### Context Injection
 

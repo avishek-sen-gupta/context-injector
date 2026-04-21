@@ -2,8 +2,8 @@
 # Deploy guvnah hooks and machines to ~/.claude/plugins/guvnah/
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+HOOKS_DIR="$REPO_ROOT/hooks/guvnah"
 DEST="$HOME/.claude/plugins/guvnah"
 
 echo "Installing guvnah to $DEST ..."
@@ -11,7 +11,7 @@ echo "Installing guvnah to $DEST ..."
 # Hooks
 mkdir -p "$DEST/hooks"
 for f in session-start.sh pre-tool-use.sh post-tool-use.sh user-prompt-submit.sh; do
-    cp "$SCRIPT_DIR/$f" "$DEST/hooks/$f"
+    cp "$HOOKS_DIR/$f" "$DEST/hooks/$f"
     chmod +x "$DEST/hooks/$f"
 done
 
