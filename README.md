@@ -234,14 +234,15 @@ The development environment (`.venv/` managed by uv) is independent of the hook 
 ### Governor
 
 ```bash
+cd /path/to/your/project
 /path/to/context-injector/install-guvnah.sh
 ```
 
 Installs:
-- Governor hooks (`session-start.sh`, `pre-tool-use.sh`, `post-tool-use.sh`, `user-prompt-submit.sh`) → `~/.claude/plugins/guvnah/hooks/`
-- Machine definitions (`tdd.json`, etc.) → `~/.claude/plugins/guvnah/machines/`
-
-After installation, add hook entries to your project's `.claude/settings.json` (the installer prints the exact JSON).
+- Governor hooks (`session-start.sh`, `pre-tool-use.sh`, `post-tool-use.sh`, `user-prompt-submit.sh`) → `.claude/hooks/guvnah/`
+- Machine definitions (`tdd.json`, etc.) → `.claude/hooks/guvnah/machines/`
+- Wires all four hook events in `.claude/settings.json`
+- Adds `/tmp/ctx-governor` Bash permissions
 
 Uninstall: `/path/to/context-injector/uninstall-guvnah.sh`
 
@@ -310,36 +311,41 @@ All scripts are idempotent — safe to run multiple times.
 
 #### Governor
 
-**1. Copy hooks:**
+**1. Copy hooks** (with PYTHONPATH pointing to context-injector repo):
 ```bash
-mkdir -p ~/.claude/plugins/guvnah/hooks
+REPO=/path/to/context-injector
+mkdir -p .claude/hooks/guvnah
 for f in session-start.sh pre-tool-use.sh post-tool-use.sh user-prompt-submit.sh; do
-  cp "hooks/guvnah/$f" ~/.claude/plugins/guvnah/hooks/
-  chmod +x ~/.claude/plugins/guvnah/hooks/"$f"
+  { echo '#!/usr/bin/env bash'
+    echo "GUVNAH_ROOT=\"$REPO\""
+    echo 'export PYTHONPATH="$GUVNAH_ROOT${PYTHONPATH:+:$PYTHONPATH}"'
+    echo 'export GUVNAH_MACHINES="$(cd "$(dirname "$0")" && pwd)/machines"'
+    tail -n +2 "$REPO/hooks/guvnah/$f"
+  } > ".claude/hooks/guvnah/$f"
+  chmod +x ".claude/hooks/guvnah/$f"
 done
 ```
 
-**2. Copy governor code and machines:**
+**2. Copy machines:**
 ```bash
-mkdir -p ~/.claude/plugins/guvnah/{governor_v4,machines}
-cp governor_v4/*.py ~/.claude/plugins/guvnah/governor_v4/
-cp machines/*.json ~/.claude/plugins/guvnah/machines/
+mkdir -p .claude/hooks/guvnah/machines
+cp "$REPO"/machines/*.json .claude/hooks/guvnah/machines/
 ```
 
 **3. Wire in `.claude/settings.json`:**
 ```json
 "hooks": {
   "SessionStart": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/session-start.sh"}]}
+    {"hooks": [{"type": "command", "command": ".claude/hooks/guvnah/session-start.sh"}]}
   ],
   "PreToolUse": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/pre-tool-use.sh"}]}
+    {"hooks": [{"type": "command", "command": ".claude/hooks/guvnah/pre-tool-use.sh"}]}
   ],
   "PostToolUse": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/post-tool-use.sh"}]}
+    {"hooks": [{"type": "command", "command": ".claude/hooks/guvnah/post-tool-use.sh"}]}
   ],
   "UserPromptSubmit": [
-    {"hooks": [{"type": "command", "command": "~/.claude/plugins/guvnah/hooks/user-prompt-submit.sh"}]}
+    {"hooks": [{"type": "command", "command": ".claude/hooks/guvnah/user-prompt-submit.sh"}]}
   ]
 }
 ```

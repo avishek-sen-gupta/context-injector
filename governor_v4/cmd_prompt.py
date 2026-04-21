@@ -11,7 +11,10 @@ from governor_v4.cli import (
     load_engine,
 )
 
-_MACHINE_DIR = os.path.expanduser("~/.claude/plugins/guvnah/machines")
+_MACHINE_DIR = os.environ.get(
+    "GUVNAH_MACHINES",
+    os.path.expanduser("~/.claude/plugins/guvnah/machines"),
+)
 
 
 def _hook_output(ctx: str) -> str:
