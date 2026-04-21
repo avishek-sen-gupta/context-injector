@@ -31,12 +31,123 @@ The governor wraps Claude Code in an evidence-based state machine. Every tool ca
 
 ### How it works
 
-1. **SessionStart** (`session-start.sh`) — restores governor state if a session is active
-2. **PreToolUse** (`pre-tool-use.sh`) — evaluates every tool call against the current phase's rules; blocks disallowed tools
-3. **PostToolUse** (`post-tool-use.sh`) — captures tool output as evidence when it matches a node's capture rules
-4. **UserPromptSubmit** (`user-prompt-submit.sh`) — parses `/governor` commands from user prompts
+The governor uses four Claude Code hook events. Each hook is a thin shell script that computes a session ID from `MD5($PWD)`, checks a lock file, and delegates to `python3 -m governor_v4`.
 
-All hooks are thin shell scripts that check `CLAUDE_SESSION_ID` and a lock file (`/tmp/ctx-governor/<session>/active`) before delegating to `python3 -m governor_v4`.
+```
+                         Claude Code
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                     │
+  SessionStart        UserPromptSubmit        Tool Call
+        │                    │               ┌─────┴─────┐
+        ▼                    ▼               ▼           ▼
+  session-start.sh   user-prompt-submit.sh  pre-tool-use.sh  post-tool-use.sh
+        │                    │               │           │
+        ▼                    ▼               ▼           ▼
+   governor_v4          governor_v4      governor_v4  governor_v4
+     cmd_init            cmd_prompt      cmd_evaluate cmd_capture
+        │                    │               │           │
+        ▼                    ▼               ▼           ▼
+  Load engine,       Parse /governor     Check tool   Match capture
+  inject phase       commands, toggle    against      rules, store
+  context            activation          blocklist    evidence
+        │                    │               │           │
+        ▼                    ▼               ▼           ▼
+  additionalContext   additionalContext   allow/deny  additionalContext
+  (phase + rules)    (status message)    decision    (evidence key)
+```
+
+#### Dataflow per hook
+
+**1. SessionStart** — restores governor state on session open
+
+```
+Claude Code starts session
+  → session-start.sh
+    → MD5($PWD) → session_id
+    → check /tmp/ctx-governor/<session>/active exists, else exit 0
+    → python3 -m governor_v4 init --session <session_id>
+      → load engine from /tmp/ctx-governor/<session>/<session>.json
+      → read current phase + blocked tools from machine config
+      → stdout: {"hookSpecificOutput": {"hookEventName": "SessionStart",
+          "additionalContext": "Governor active: phase=writing_tests. Write, Edit blocked..."}}
+  → Claude sees phase context in conversation
+```
+
+**2. UserPromptSubmit** — parses `/governor` commands
+
+```
+User types "/governor tdd"
+  → user-prompt-submit.sh
+    → grep stdin for "/governor" or expanded command prefix, else exit 0
+    → python3 -m governor_v4 prompt --session <session_id> < stdin
+      → extract command from prompt (raw "/governor tdd" or expanded form)
+      → /governor <machine>: load JSON, create lock file + state, return activation message
+      → /governor off: remove lock file + state dir
+      → /governor status: load engine, describe phase + blocked tools + transitions
+      → /governor transition <target> [key]: validate edge + evidence + gate, transition or deny
+      → /governor evidence: list all entries in evidence locker
+      → stdout: {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+          "additionalContext": "Governor activated: machine=tdd, phase=writing_tests..."}}
+  → Claude sees command result in conversation
+```
+
+**3. PreToolUse** — evaluates every tool call against current phase
+
+```
+Claude wants to call Write("main.py")
+  → pre-tool-use.sh
+    → check lock file exists, else exit 0
+    → python3 -m governor_v4 evaluate --session <session_id> < stdin
+      → stdin: {"tool_name": "Write", "tool_input": {"file_path": "main.py"}}
+      → load engine, get current node's blocked_tools + allowed_exceptions
+      → check_tool_allowed("Write", "main.py", blocked=["Write","Edit"],
+          exceptions=["Write(test_*)","Edit(test_*)"])
+      → "main.py" doesn't match "test_*" → BLOCKED
+      → stdout: {"decision": "block", "reason": "...",
+          "hookSpecificOutput": {"hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "Write is blocked in writing_tests"}}
+  → Claude Code blocks the tool call, shows reason to agent
+
+Claude wants to call Write("test_auth.py")
+  → same flow, but "test_auth.py" matches "test_*" → ALLOWED
+  → no stdout (exit 0) → Claude Code allows the tool call
+```
+
+**4. PostToolUse** — captures tool output as evidence
+
+```
+Claude runs Bash("python3 -m pytest tests/ -v") and it completes
+  → post-tool-use.sh
+    → check lock file exists, else exit 0
+    → python3 -m governor_v4 capture --session <session_id> < stdin
+      → stdin: {"tool_name": "Bash", "tool_input": {"command": "python3 -m pytest ..."},
+          "tool_output": "FAILED 2 passed, 1 failed", "tool_exit_code": 1}
+      → load engine, get current node's capture rules
+      → match_capture_rule("Bash", "python3 -m pytest ...", "Bash(*pytest*)")
+        → fnmatch "python3 -m pytest ..." against "*pytest*" → MATCH
+      → store in evidence locker: {type: "pytest_output", tool_name: "Bash",
+          command: "...", output: "...", exit_code: 1}
+      → stdout: {"hookSpecificOutput": {"hookEventName": "PostToolUse",
+          "additionalContext": "Evidence captured: evt_abc123 (type=pytest_output).
+            Use '/governor transition <target> evt_abc123' to request a state transition."}}
+  → Claude sees evidence key, can use it for transition
+```
+
+#### State persistence
+
+All state lives under `/tmp/ctx-governor/<session_id>/`:
+
+```
+/tmp/ctx-governor/
+  d41d8cd9.../              ← MD5 of project directory
+    active                  ← lock file (contains {"machine": "/path/to/tdd.json"})
+    d41d8cd9....json        ← engine state (contains {"current_phase": "writing_tests"})
+    d41d8cd9..._evidence.json  ← evidence locker (TinyDB)
+```
+
+Each hook invocation loads the engine from these files, performs its action, and saves updated state. The lock file doubles as the activation check — all hooks exit immediately if it doesn't exist.
 
 ### Evidence-based transitions
 
