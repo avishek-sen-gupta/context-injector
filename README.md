@@ -68,8 +68,8 @@ Each node defines **capture rules** that match tool output and store it in the e
 
 ```json
 "capture": [
-    {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"},
-    {"tool_pattern": "Bash(ruff*)", "evidence_type": "lint_output"}
+    {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"},
+    {"tool_pattern": "Bash(*ruff*)", "evidence_type": "lint_output"}
 ]
 ```
 
@@ -129,7 +129,7 @@ Machines are JSON files placed in `machines/` and deployed to `~/.claude/plugins
             "blocked_tools": ["Write", "Edit"],
             "allowed_exceptions": ["Write(test_*)"],
             "capture": [
-                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"}
+                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"}
             ]
         },
         {"name": "step_b"}

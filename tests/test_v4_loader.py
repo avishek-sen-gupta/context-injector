@@ -15,7 +15,7 @@ SIMPLE_MACHINE = json.dumps({
             "blocked_tools": ["Write", "Edit"],
             "allowed_exceptions": ["Write(test_*)", "Edit(test_*)"],
             "capture": [
-                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"}
+                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"}
             ],
         },
         {"name": "fixing_tests"},
@@ -42,7 +42,7 @@ class TestLoadFromString:
         config = load_machine_from_json(SIMPLE_MACHINE)
         wt = next(n for n in config.nodes if n.name == "writing_tests")
         assert len(wt.capture) == 1
-        assert wt.capture[0].tool_pattern == "Bash(pytest*)"
+        assert wt.capture[0].tool_pattern == "Bash(*pytest*)"
         assert wt.capture[0].evidence_type == "pytest_output"
 
     def test_edge_with_contract(self):

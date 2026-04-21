@@ -54,19 +54,19 @@ class TestCheckToolAllowed:
 
 class TestMatchCaptureRule:
     def test_bash_pytest_matches(self):
-        assert match_capture_rule("Bash", "pytest tests/", "Bash(pytest*)")
+        assert match_capture_rule("Bash", "pytest tests/", "Bash(*pytest*)")
 
     def test_bash_pytest_verbose_matches(self):
-        assert match_capture_rule("Bash", "pytest tests/ -xvs", "Bash(pytest*)")
+        assert match_capture_rule("Bash", "pytest tests/ -xvs", "Bash(*pytest*)")
 
     def test_bash_non_pytest_no_match(self):
-        assert not match_capture_rule("Bash", "ls -la", "Bash(pytest*)")
+        assert not match_capture_rule("Bash", "ls -la", "Bash(*pytest*)")
 
     def test_wrong_tool_no_match(self):
-        assert not match_capture_rule("Write", "test_foo.py", "Bash(pytest*)")
+        assert not match_capture_rule("Write", "test_foo.py", "Bash(*pytest*)")
 
     def test_bash_ruff_matches(self):
-        assert match_capture_rule("Bash", "ruff check src/", "Bash(ruff*)")
+        assert match_capture_rule("Bash", "ruff check src/", "Bash(*ruff*)")
 
     def test_bare_tool_pattern(self):
         assert match_capture_rule("Bash", "anything", "Bash")

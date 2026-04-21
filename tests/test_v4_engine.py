@@ -16,7 +16,7 @@ def make_simple_machine():
                 initial=True,
                 blocked_tools=["Write", "Edit"],
                 allowed_exceptions=["Write(test_*)", "Edit(test_*)"],
-                capture=[CaptureRule(tool_pattern="Bash(pytest*)", evidence_type="pytest_output")],
+                capture=[CaptureRule(tool_pattern="Bash(*pytest*)", evidence_type="pytest_output")],
             ),
             NodeConfig(name="fixing_tests"),
         ],

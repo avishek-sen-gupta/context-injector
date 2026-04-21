@@ -8,27 +8,27 @@
             "blocked_tools": ["Write", "Edit"],
             "allowed_exceptions": ["Write(test_*)", "Edit(test_*)"],
             "capture": [
-                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"}
+                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"}
             ]
         },
         {
             "name": "fixing_tests",
             "capture": [
-                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"},
-                {"tool_pattern": "Bash(ruff*)", "evidence_type": "lint_output"}
+                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"},
+                {"tool_pattern": "Bash(*ruff*)", "evidence_type": "lint_output"}
             ]
         },
         {
             "name": "refactoring",
             "capture": [
-                {"tool_pattern": "Bash(pytest*)", "evidence_type": "pytest_output"},
-                {"tool_pattern": "Bash(ruff*)", "evidence_type": "lint_output"}
+                {"tool_pattern": "Bash(*pytest*)", "evidence_type": "pytest_output"},
+                {"tool_pattern": "Bash(*ruff*)", "evidence_type": "lint_output"}
             ]
         },
         {
             "name": "fixing_lint",
             "capture": [
-                {"tool_pattern": "Bash(ruff*)", "evidence_type": "lint_output"}
+                {"tool_pattern": "Bash(*ruff*)", "evidence_type": "lint_output"}
             ]
         }
     ],

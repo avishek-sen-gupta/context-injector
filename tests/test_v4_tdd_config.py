@@ -39,7 +39,7 @@ def test_tdd_writing_tests_captures_pytest():
     config = load_machine_from_json(TDD_JSON_PATH, from_file=True)
     node = next(n for n in config.nodes if n.name == "writing_tests")
     assert len(node.capture) == 1
-    assert node.capture[0].tool_pattern == "Bash(pytest*)"
+    assert node.capture[0].tool_pattern == "Bash(*pytest*)"
     assert node.capture[0].evidence_type == "pytest_output"
 
 

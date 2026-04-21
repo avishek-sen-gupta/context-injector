@@ -6,8 +6,8 @@ from governor_v4.config import (
 
 class TestCaptureRule:
     def test_creation(self):
-        rule = CaptureRule(tool_pattern="Bash(pytest*)", evidence_type="pytest_output")
-        assert rule.tool_pattern == "Bash(pytest*)"
+        rule = CaptureRule(tool_pattern="Bash(*pytest*)", evidence_type="pytest_output")
+        assert rule.tool_pattern == "Bash(*pytest*)"
         assert rule.evidence_type == "pytest_output"
 
 
@@ -25,7 +25,7 @@ class TestNodeConfig:
             initial=True,
             blocked_tools=["Write", "Edit"],
             allowed_exceptions=["Write(test_*)", "Edit(test_*)"],
-            capture=[CaptureRule(tool_pattern="Bash(pytest*)", evidence_type="pytest_output")],
+            capture=[CaptureRule(tool_pattern="Bash(*pytest*)", evidence_type="pytest_output")],
         )
         assert node.name == "writing_tests"
         assert node.initial is True

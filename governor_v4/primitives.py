@@ -38,7 +38,7 @@ def check_tool_allowed(
 
 
 def match_capture_rule(tool_name: str, tool_arg: str, tool_pattern: str) -> bool:
-    """Check if a tool call matches a capture rule pattern like 'Bash(pytest*)'.
+    """Check if a tool call matches a capture rule pattern like 'Bash(*pytest*)'.
 
     Uses the same ToolName(arg_glob) syntax as exception patterns.
     """

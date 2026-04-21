@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CaptureRule:
     """Defines which tool outputs to capture as evidence."""
-    tool_pattern: str      # e.g. "Bash(pytest*)"
+    tool_pattern: str      # e.g. "Bash(*pytest*)"
     evidence_type: str     # e.g. "pytest_output"
 
 
