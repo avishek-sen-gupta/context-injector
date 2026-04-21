@@ -36,6 +36,12 @@ else
   echo "No .claude/settings.json found, skipping hook removal."
 fi
 
+# --- remove /governor command ---
+if [ -f "$PROJECT_DIR/.claude/commands/governor.md" ]; then
+  rm -f "$PROJECT_DIR/.claude/commands/governor.md"
+  echo "Removed /governor command."
+fi
+
 # --- remove hook files ---
 if [ -d "$DEST" ]; then
   echo "Removing $DEST ..."
