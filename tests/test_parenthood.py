@@ -111,3 +111,29 @@ class TestBuildAbstractionTree:
         result = build_abstraction_tree(trees, LineSetStrategy(), threshold=0.95)
         all_children = {name for children in result.values() for name, _ in children}
         assert "test_a" not in all_children
+
+
+from parenthood import render_hierarchy
+
+
+class TestRenderHierarchy:
+    def test_simple_hierarchy(self):
+        adjacency = {"test_a": [("test_b", 0.98), ("test_c", 0.96)]}
+        all_names = {"test_a", "test_b", "test_c"}
+        output = render_hierarchy(adjacency, all_names)
+        assert "test_a" in output
+        assert "test_b (0.98)" in output
+        assert "test_c (0.96)" in output
+        assert "Roots: test_a" in output
+
+    def test_leaves_listed(self):
+        adjacency = {"test_a": [("test_b", 0.99)]}
+        all_names = {"test_a", "test_b"}
+        output = render_hierarchy(adjacency, all_names)
+        assert "Leaves: test_b" in output
+
+    def test_empty_adjacency(self):
+        adjacency = {}
+        all_names = {"test_a", "test_b"}
+        output = render_hierarchy(adjacency, all_names)
+        assert "No parent-child relationships found" in output

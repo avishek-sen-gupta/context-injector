@@ -77,3 +77,35 @@ def build_abstraction_tree(
             reduced[parent] = kept
 
     return reduced
+
+
+def render_hierarchy(
+    adjacency: dict[str, list[tuple[str, float]]],
+    all_names: set[str],
+    threshold: float = 0.95,
+) -> str:
+    """Render the abstraction hierarchy as a printable string."""
+    if not adjacency:
+        return "No parent-child relationships found at this threshold."
+
+    all_children = {name for children in adjacency.values() for name, _ in children}
+    roots = sorted(all_names - all_children)
+    leaves = sorted(all_names - set(adjacency.keys()))
+
+    lines = [f"TEST ABSTRACTION HIERARCHY (threshold={threshold}):"]
+    for parent in sorted(adjacency.keys()):
+        lines.append(parent)
+        children = sorted(adjacency[parent], key=lambda x: x[1], reverse=True)
+        for i, (child, score) in enumerate(children):
+            connector = "|-- "
+            lines.append(f"  {connector}{child} ({score:.2f})")
+
+    # Filter roots/leaves to only those actually in the hierarchy
+    root_names = [r for r in roots if r in adjacency or r in all_children]
+    leaf_names = [l for l in leaves if l in adjacency or l in all_children]
+    if root_names:
+        lines.append(f"Roots: {', '.join(root_names)}")
+    if leaf_names:
+        lines.append(f"Leaves: {', '.join(leaf_names)}")
+
+    return "\n".join(lines)
