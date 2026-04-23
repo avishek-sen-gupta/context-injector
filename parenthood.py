@@ -96,9 +96,8 @@ def render_hierarchy(
     for parent in sorted(adjacency.keys()):
         lines.append(parent)
         children = sorted(adjacency[parent], key=lambda x: x[1], reverse=True)
-        for i, (child, score) in enumerate(children):
-            connector = "|-- "
-            lines.append(f"  {connector}{child} ({score:.2f})")
+        for child, score in children:
+            lines.append(f"  |-- {child} ({score:.2f})")
 
     # Filter roots/leaves to only those actually in the hierarchy
     root_names = [r for r in roots if r in adjacency or r in all_children]
