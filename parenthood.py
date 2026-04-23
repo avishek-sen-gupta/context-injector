@@ -84,27 +84,30 @@ def render_hierarchy(
     all_names: set[str],
     threshold: float = 0.95,
 ) -> str:
-    """Render the abstraction hierarchy as a printable string."""
+    """Render the abstraction hierarchy as a nested tree string."""
     if not adjacency:
         return "No parent-child relationships found at this threshold."
 
     all_children = {name for children in adjacency.values() for name, _ in children}
-    roots = sorted(all_names - all_children)
-    leaves = sorted(all_names - set(adjacency.keys()))
+    roots = sorted(
+        [n for n in all_names if n not in all_children]
+    )
 
     lines = [f"TEST ABSTRACTION HIERARCHY (threshold={threshold}):"]
-    for parent in sorted(adjacency.keys()):
-        lines.append(parent)
-        children = sorted(adjacency[parent], key=lambda x: x[1], reverse=True)
-        for child, score in children:
-            lines.append(f"  |-- {child} ({score:.2f})")
 
-    # Filter roots/leaves to only those actually in the hierarchy
-    root_names = [r for r in roots if r in adjacency or r in all_children]
-    leaf_names = [l for l in leaves if l in adjacency or l in all_children]
-    if root_names:
-        lines.append(f"Roots: {', '.join(root_names)}")
-    if leaf_names:
-        lines.append(f"Leaves: {', '.join(leaf_names)}")
+    def _render(name, score, prefix, is_last):
+        connector = "└── " if is_last else "├── "
+        score_str = f" ({score:.2f})" if score is not None else ""
+        lines.append(f"{prefix}{connector}{name}{score_str}")
+        children = adjacency.get(name, [])
+        if not children:
+            return
+        children = sorted(children, key=lambda x: x[1], reverse=True)
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        for i, (child, child_score) in enumerate(children):
+            _render(child, child_score, new_prefix, i == len(children) - 1)
+
+    for i, root in enumerate(roots):
+        _render(root, None, "", i == len(roots) - 1)
 
     return "\n".join(lines)

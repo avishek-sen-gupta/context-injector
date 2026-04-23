@@ -124,13 +124,22 @@ class TestRenderHierarchy:
         assert "test_a" in output
         assert "test_b (0.98)" in output
         assert "test_c (0.96)" in output
-        assert "Roots: test_a" in output
 
-    def test_leaves_listed(self):
-        adjacency = {"test_a": [("test_b", 0.99)]}
-        all_names = {"test_a", "test_b"}
+    def test_nested_tree(self):
+        """A->B->C renders as a nested tree."""
+        adjacency = {
+            "test_a": [("test_b", 0.99)],
+            "test_b": [("test_c", 0.97)],
+        }
+        all_names = {"test_a", "test_b", "test_c"}
         output = render_hierarchy(adjacency, all_names)
-        assert "Leaves: test_b" in output
+        # test_c should be indented under test_b, which is under test_a
+        assert "test_c (0.97)" in output
+        lines = output.split("\n")
+        # Find indentation depths
+        depth_b = next(len(l) - len(l.lstrip()) for l in lines if "test_b" in l)
+        depth_c = next(len(l) - len(l.lstrip()) for l in lines if "test_c" in l)
+        assert depth_c > depth_b
 
     def test_empty_adjacency(self):
         adjacency = {}
