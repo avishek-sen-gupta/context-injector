@@ -3,7 +3,7 @@
 
 import tempfile
 from tracer import trace_test
-from parenthood import LineSetStrategy, build_abstraction_tree, render_hierarchy
+from parenthood import LineSetStrategy, build_hierarchy
 from tests.test_v4_engine import make_simple_machine
 from governor_v4.engine import GovernorV4
 
@@ -58,6 +58,6 @@ if __name__ == "__main__":
     print()
     print("=" * 80)
     strategy = LineSetStrategy()
-    adjacency = build_abstraction_tree(trees, strategy)
-    print(render_hierarchy(adjacency, set(trees.keys())))
+    graph = build_hierarchy(trees, strategy)
+    print(graph.render_text())
     print("=" * 80)

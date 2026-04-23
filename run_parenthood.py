@@ -3,7 +3,7 @@
 
 import pytest
 from tracer import trace_context
-from parenthood import LineSetStrategy, build_abstraction_tree, render_hierarchy
+from parenthood import LineSetStrategy, build_hierarchy
 
 
 class ParenthoodPlugin:
@@ -24,8 +24,8 @@ class ParenthoodPlugin:
         print()
         print("=" * 80)
         strategy = LineSetStrategy()
-        adjacency = build_abstraction_tree(self.trees, strategy)
-        print(render_hierarchy(adjacency, set(self.trees.keys())))
+        graph = build_hierarchy(self.trees, strategy)
+        print(graph.render_text())
         print("=" * 80)
 
 
