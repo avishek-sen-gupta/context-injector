@@ -25,10 +25,10 @@ scan_file_contents() {
     local files short branches
     files=$(git diff-tree --no-commit-id -r --name-only "$sha" 2>/dev/null)
     short=$(git log -1 --format='%h' "$sha" 2>/dev/null)
-    echo -ne "  ${DIM}Scanning commit $i/$num_commits ($short)...\r${RESET}" >&2
     branches=$(git branch --all --contains "$sha" 2>/dev/null \
       | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
     [ -z "$branches" ] && branches="-"
+    echo -ne "  ${DIM}Scanning commit $i/$num_commits ($short) [${branches}]...\r${RESET}" >&2
 
     echo "$files" | while read -r file; do
       git show "$sha:$file" 2>/dev/null | grep -nE "$PATTERN" | while IFS=: read -r lineno rest; do
@@ -41,7 +41,7 @@ scan_file_contents() {
       done
     done
   done | head -80
-  echo -ne "  ${DIM}                                        \r${RESET}" >&2
+  echo -ne "  ${DIM}$(printf '%80s')\r${RESET}" >&2
 
   # Count hits for footer (re-run is cheap since git caches)
   local total
@@ -76,10 +76,10 @@ scan_commit_messages() {
     full_sha=$(echo "$line" | cut -d' ' -f1)
     sha=$(echo "$line" | cut -d' ' -f2)
     msg=$(echo "$line" | cut -d' ' -f3-)
-    echo -ne "  ${DIM}Scanning message $i/$num_hits ($sha)...\r${RESET}" >&2
     branches=$(git branch --all --contains "$full_sha" 2>/dev/null \
       | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
     [ -z "$branches" ] && branches="-"
+    echo -ne "  ${DIM}Scanning message $i/$num_hits ($sha) [${branches}]...\r${RESET}" >&2
 
     echo "$msg" | grep -oE "$PATTERN" | sort -u | while read -r term; do
       local pos ctx
@@ -89,7 +89,7 @@ scan_commit_messages() {
       count=$((count + 1))
     done
   done
-  echo -ne "  ${DIM}                                        \r${RESET}" >&2
+  echo -ne "  ${DIM}$(printf '%80s')\r${RESET}" >&2
 
   local total
   total=$(echo "$hits" | wc -l | tr -d ' ')
@@ -103,6 +103,12 @@ load_pattern || exit 0
 
 echo ""
 echo -e "${BOLD}Scanning git history for forbidden terms...${RESET}"
+
+# Log branches being scanned
+local_branches=$(git branch --format='%(refname:short)' 2>/dev/null | paste -sd ', ' -)
+remote_branches=$(git branch -r --format='%(refname:short)' 2>/dev/null | paste -sd ', ' -)
+echo -e "  ${DIM}Local branches: ${local_branches:-none}${RESET}"
+[ -n "$remote_branches" ] && echo -e "  ${DIM}Remote branches: ${remote_branches}${RESET}"
 
 FOUND=0
 scan_file_contents   && FOUND=1
