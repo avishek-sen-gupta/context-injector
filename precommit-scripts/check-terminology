@@ -43,7 +43,9 @@ scan_staged_changes() {
         echo "$content" | grep -oE "$PATTERN" | sort -u | while read -r term; do
           local ctx
           ctx=$(snippet_around "$content" "$term")
-          print_table_row "staged" "$current_file" "$term" "$ctx"
+          local branch
+          branch=$(git branch --show-current 2>/dev/null || echo "-")
+          print_table_row "staged" "$branch" "$current_file" "$term" "$ctx"
         done
         count=$((count + 1))
       fi

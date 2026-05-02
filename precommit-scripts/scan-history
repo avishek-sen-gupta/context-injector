@@ -15,16 +15,19 @@ scan_file_contents() {
   print_table_header "Forbidden terms in file contents"
 
   echo "$commits" | while read -r sha; do
-    local files short
+    local files short branches
     files=$(git diff-tree --no-commit-id -r --name-only "$sha" 2>/dev/null)
     short=$(git log -1 --format='%h' "$sha" 2>/dev/null)
+    branches=$(git branch --all --contains "$sha" 2>/dev/null \
+      | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
+    [ -z "$branches" ] && branches="-"
 
     echo "$files" | while read -r file; do
       git show "$sha:$file" 2>/dev/null | grep -nE "$PATTERN" | while IFS=: read -r lineno rest; do
         echo "$rest" | grep -oE "$PATTERN" | sort -u | while read -r term; do
           local ctx
           ctx=$(snippet_around "$rest" "$term")
-          print_table_row "$short" "$file:$lineno" "$term" "$ctx"
+          print_table_row "$short" "$branches" "$file:$lineno" "$term" "$ctx"
           count=$((count + 1))
         done
       done
@@ -45,7 +48,7 @@ scan_file_contents() {
 scan_commit_messages() {
   # Use %x00 as record separator so multi-line bodies stay with their commit
   local hits
-  hits=$(git log --all --format='%x00%h %s %b' 2>/dev/null \
+  hits=$(git log --all --format='%x00%H %h %s %b' 2>/dev/null \
     | tr '\n' ' ' | tr '\0' '\n' \
     | grep -E "$PATTERN" | head -10)
   [ -z "$hits" ] && return 1
@@ -54,15 +57,19 @@ scan_commit_messages() {
 
   local count=0
   echo "$hits" | while IFS= read -r line; do
-    local sha msg
-    sha=$(echo "$line" | cut -d' ' -f1)
-    msg=$(echo "$line" | cut -d' ' -f2-)
+    local full_sha sha msg branches
+    full_sha=$(echo "$line" | cut -d' ' -f1)
+    sha=$(echo "$line" | cut -d' ' -f2)
+    msg=$(echo "$line" | cut -d' ' -f3-)
+    branches=$(git branch --all --contains "$full_sha" 2>/dev/null \
+      | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
+    [ -z "$branches" ] && branches="-"
 
     echo "$msg" | grep -oE "$PATTERN" | sort -u | while read -r term; do
       local pos ctx
       pos=$(echo "$msg" | grep -boE "$term" | head -1 | cut -d: -f1)
       ctx=$(snippet_around "$msg" "$term")
-      print_table_row "$sha" "col:$pos" "$term" "$ctx"
+      print_table_row "$sha" "$branches" "col:$pos" "$term" "$ctx"
       count=$((count + 1))
     done
   done

@@ -62,15 +62,15 @@ print_table_header() {
   local title="$1"
   echo ""
   echo -e "${RED}${BOLD} $title ${RESET}"
-  echo -e "${DIM}$(printf '%.0s─' {1..90})${RESET}"
-  printf "  ${BOLD}%-14s %-30s %-10s %s${RESET}\n" "COMMIT" "LOCATION" "TERM" "CONTEXT"
-  echo -e "${DIM}$(printf '%.0s─' {1..90})${RESET}"
+  echo -e "${DIM}$(printf '%.0s─' {1..110})${RESET}"
+  printf "  ${BOLD}%-14s %-20s %-30s %-10s %s${RESET}\n" "COMMIT" "BRANCH" "LOCATION" "TERM" "CONTEXT"
+  echo -e "${DIM}$(printf '%.0s─' {1..110})${RESET}"
 }
 
 print_table_row() {
-  local sha="$1" location="$2" term="$3" context="$4"
-  printf "  ${CYAN}%-14s${RESET} %-30s ${YELLOW}%-10s${RESET} ${DIM}...${RESET}%b${DIM}...${RESET}\n" \
-    "$sha" "$location" "\"$term\"" "$context"
+  local sha="$1" branch="$2" location="$3" term="$4" context="$5"
+  printf "  ${CYAN}%-14s${RESET} %-20s %-30s ${YELLOW}%-10s${RESET} ${DIM}...${RESET}%b${DIM}...${RESET}\n" \
+    "$sha" "$branch" "$location" "\"$term\"" "$context"
 }
 
 print_table_footer() {
