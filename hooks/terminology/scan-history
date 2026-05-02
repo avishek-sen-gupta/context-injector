@@ -43,8 +43,11 @@ scan_file_contents() {
 }
 
 scan_commit_messages() {
+  # Use %x00 as record separator so multi-line bodies stay with their commit
   local hits
-  hits=$(git log --all --format='%h %s %b' 2>/dev/null | grep -E "$PATTERN" | head -10)
+  hits=$(git log --all --format='%x00%h %s %b' 2>/dev/null \
+    | tr '\n' ' ' | tr '\0' '\n' \
+    | grep -E "$PATTERN" | head -10)
   [ -z "$hits" ] && return 1
 
   print_table_header "Forbidden terms in commit messages"
