@@ -12,3 +12,6 @@ venv/
 .claude/state/
 .serena/
 *.egg-info/
+.remember/
+.zdotdir/
+.zshenv

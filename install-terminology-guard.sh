@@ -1,16 +1,14 @@
 #!/bin/sh
 # install-terminology-guard.sh — Terminology Guard installer.
 # Run from the root of the git project you want to protect.
-# Wires check-terminology into .git/hooks/pre-commit (idempotent).
-# scan-history is installed globally and callable from any repo.
+# Copies scripts to precommit-scripts/ and wires .pre-commit-config.yaml.
+# scan-history is also installed to precommit-scripts/ for manual use.
 
 set -e
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$PWD"
-INSTALL_DIR="$HOME/.claude/plugins/context-injector/gates/terminology"
-PRE_COMMIT_HOOK="$PROJECT_DIR/.git/hooks/pre-commit"
-HOOK_CALL="$INSTALL_DIR/check-terminology"
+SCRIPTS_DIR="$PROJECT_DIR/precommit-scripts"
 
 # --- validate ---
 if [ ! -d "$PROJECT_DIR/.git" ]; then
@@ -19,32 +17,42 @@ if [ ! -d "$PROJECT_DIR/.git" ]; then
 fi
 
 # --- install scripts ---
-echo "Installing terminology guard scripts..."
-mkdir -p "$INSTALL_DIR"
-cp "$PLUGIN_DIR/gates/terminology/lib-terminology.sh" "$INSTALL_DIR/"
-cp "$PLUGIN_DIR/gates/terminology/check-terminology"  "$INSTALL_DIR/"
-cp "$PLUGIN_DIR/gates/terminology/scan-history"       "$INSTALL_DIR/"
-chmod +x "$INSTALL_DIR/check-terminology" "$INSTALL_DIR/scan-history"
+echo "Installing terminology guard scripts to precommit-scripts/..."
+mkdir -p "$SCRIPTS_DIR"
+cp "$PLUGIN_DIR/hooks/terminology/lib-terminology.sh" "$SCRIPTS_DIR/"
+cp "$PLUGIN_DIR/hooks/terminology/check-terminology"  "$SCRIPTS_DIR/"
+cp "$PLUGIN_DIR/hooks/terminology/scan-history"       "$SCRIPTS_DIR/"
+chmod +x "$SCRIPTS_DIR/check-terminology" "$SCRIPTS_DIR/scan-history"
 
-# --- wire pre-commit hook (idempotent) ---
-if [ -f "$PRE_COMMIT_HOOK" ]; then
-  if grep -q "check-terminology" "$PRE_COMMIT_HOOK" 2>/dev/null; then
-    echo "pre-commit hook already wired, skipping."
-  else
-    echo "Adding terminology guard to existing pre-commit hook..."
-    echo "" >> "$PRE_COMMIT_HOOK"
-    echo "# terminology guard" >> "$PRE_COMMIT_HOOK"
-    echo "$HOOK_CALL" >> "$PRE_COMMIT_HOOK"
-    chmod +x "$PRE_COMMIT_HOOK"
-  fi
+# --- wire .pre-commit-config.yaml (idempotent) ---
+CONFIG="$PROJECT_DIR/.pre-commit-config.yaml"
+if [ -f "$CONFIG" ] && grep -q "id: terminology-guard" "$CONFIG" 2>/dev/null; then
+  echo "terminology-guard already in .pre-commit-config.yaml, skipping."
 else
-  echo "Creating pre-commit hook..."
-  cat > "$PRE_COMMIT_HOOK" <<EOF
-#!/bin/sh
-# terminology guard
-$HOOK_CALL
+  echo "Adding terminology-guard to .pre-commit-config.yaml..."
+  if [ ! -f "$CONFIG" ]; then
+    cat > "$CONFIG" <<'EOF'
+repos:
+  - repo: local
+    hooks:
+      - id: terminology-guard
+        name: Terminology Guard
+        entry: precommit-scripts/check-terminology
+        language: script
+        types: [text]
 EOF
-  chmod +x "$PRE_COMMIT_HOOK"
+  else
+    cat >> "$CONFIG" <<'EOF'
+
+  - repo: local
+    hooks:
+      - id: terminology-guard
+        name: Terminology Guard
+        entry: precommit-scripts/check-terminology
+        language: script
+        types: [text]
+EOF
+  fi
 fi
 
 # --- blocklist reminder ---
@@ -59,7 +67,7 @@ fi
 echo ""
 echo "Done. Terminology guard installed for $PROJECT_DIR."
 echo ""
-echo "  Pre-commit gate : $HOOK_CALL"
-echo "  History scanner : $INSTALL_DIR/scan-history  (run from any git repo)"
+echo "  Pre-commit gate : precommit-scripts/check-terminology (via .pre-commit-config.yaml)"
+echo "  History scanner : precommit-scripts/scan-history  (run from any git repo)"
 echo "  Blocklist       : $BLOCKLIST"
 echo "  Excludelist     : $HOME/.config/git/blocklist-exclude.txt  (optional)"
