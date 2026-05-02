@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        args: [governor_v4, tests]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: terminology-guard
+        name: Terminology Guard
+        entry: precommit-scripts/check-terminology
+        language: script
+        types: [text]
