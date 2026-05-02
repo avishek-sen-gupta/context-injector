@@ -9,15 +9,23 @@ source "$SCRIPT_DIR/lib-terminology.sh"
 
 scan_file_contents() {
   local commits count=0
+  echo -e "  ${DIM}Searching commits for pattern matches...${RESET}" >&2
   commits=$(git log --all -G "$PATTERN" --pretty=format:"%H" -- 2>/dev/null | sort -u)
-  [ -z "$commits" ] && return 1
+  [ -z "$commits" ] && { echo -e "  ${DIM}No matches in file contents.${RESET}" >&2; return 1; }
+
+  local num_commits
+  num_commits=$(echo "$commits" | wc -l | tr -d ' ')
+  echo -e "  ${DIM}Found $num_commits commit(s) to inspect...${RESET}" >&2
 
   print_table_header "Forbidden terms in file contents"
 
+  local i=0
   echo "$commits" | while read -r sha; do
+    i=$((i + 1))
     local files short branches
     files=$(git diff-tree --no-commit-id -r --name-only "$sha" 2>/dev/null)
     short=$(git log -1 --format='%h' "$sha" 2>/dev/null)
+    echo -ne "  ${DIM}Scanning commit $i/$num_commits ($short)...\r${RESET}" >&2
     branches=$(git branch --all --contains "$sha" 2>/dev/null \
       | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
     [ -z "$branches" ] && branches="-"
@@ -33,6 +41,7 @@ scan_file_contents() {
       done
     done
   done | head -80
+  echo -ne "  ${DIM}                                        \r${RESET}" >&2
 
   # Count hits for footer (re-run is cheap since git caches)
   local total
@@ -48,19 +57,26 @@ scan_file_contents() {
 scan_commit_messages() {
   # Use %x00 as record separator so multi-line bodies stay with their commit
   local hits
+  echo -e "  ${DIM}Searching commit messages for pattern matches...${RESET}" >&2
   hits=$(git log --all --format='%x00%H %h %s %b' 2>/dev/null \
     | tr '\n' ' ' | tr '\0' '\n' \
     | grep -E "$PATTERN" | head -10)
-  [ -z "$hits" ] && return 1
+  [ -z "$hits" ] && { echo -e "  ${DIM}No matches in commit messages.${RESET}" >&2; return 1; }
+
+  local num_hits
+  num_hits=$(echo "$hits" | wc -l | tr -d ' ')
+  echo -e "  ${DIM}Found $num_hits commit message(s) to inspect...${RESET}" >&2
 
   print_table_header "Forbidden terms in commit messages"
 
-  local count=0
+  local count=0 i=0
   echo "$hits" | while IFS= read -r line; do
+    i=$((i + 1))
     local full_sha sha msg branches
     full_sha=$(echo "$line" | cut -d' ' -f1)
     sha=$(echo "$line" | cut -d' ' -f2)
     msg=$(echo "$line" | cut -d' ' -f3-)
+    echo -ne "  ${DIM}Scanning message $i/$num_hits ($sha)...\r${RESET}" >&2
     branches=$(git branch --all --contains "$full_sha" 2>/dev/null \
       | sed 's/^[* ]*//' | sed 's|remotes/origin/||' | sort -u | paste -sd ',' -)
     [ -z "$branches" ] && branches="-"
@@ -73,6 +89,7 @@ scan_commit_messages() {
       count=$((count + 1))
     done
   done
+  echo -ne "  ${DIM}                                        \r${RESET}" >&2
 
   local total
   total=$(echo "$hits" | wc -l | tr -d ' ')
