@@ -26,33 +26,73 @@ chmod +x "$SCRIPTS_DIR/check-terminology" "$SCRIPTS_DIR/scan-history"
 
 # --- wire .pre-commit-config.yaml (idempotent) ---
 CONFIG="$PROJECT_DIR/.pre-commit-config.yaml"
+HOOK_ENTRY="      - id: terminology-guard
+        name: Terminology Guard
+        entry: precommit-scripts/check-terminology
+        language: script
+        types: [text]"
+
 if [ -f "$CONFIG" ] && grep -q "id: terminology-guard" "$CONFIG" 2>/dev/null; then
   echo "terminology-guard already in .pre-commit-config.yaml, skipping."
-else
-  echo "Adding terminology-guard to .pre-commit-config.yaml..."
-  if [ ! -f "$CONFIG" ]; then
-    cat > "$CONFIG" <<'EOF'
+elif [ ! -f "$CONFIG" ]; then
+  echo "Creating .pre-commit-config.yaml with terminology-guard..."
+  cat > "$CONFIG" <<EOF
 repos:
   - repo: local
     hooks:
+$HOOK_ENTRY
+EOF
+elif grep -q "repo: local" "$CONFIG" 2>/dev/null; then
+  echo "Adding terminology-guard to existing repo: local block..."
+  # Append the hook entry after the last line of the repo: local block.
+  # Strategy: find the line number of "repo: local", then find the last
+  # non-blank line before the next "- repo:" or EOF, and insert after it.
+  python3 -c "
+import re, sys
+
+with open('$CONFIG') as f:
+    lines = f.readlines()
+
+# Find the 'repo: local' line
+local_idx = None
+for i, line in enumerate(lines):
+    if re.search(r'repo:\s*local', line):
+        local_idx = i
+        break
+
+if local_idx is None:
+    sys.exit(1)
+
+# Find the end of this repo block: next '- repo:' at same indent or EOF
+insert_at = len(lines)
+for i in range(local_idx + 1, len(lines)):
+    if re.match(r'\s*- repo:', lines[i]):
+        # Back up past any blank lines
+        insert_at = i
+        while insert_at > local_idx and lines[insert_at - 1].strip() == '':
+            insert_at -= 1
+        break
+
+hook = '''
       - id: terminology-guard
         name: Terminology Guard
         entry: precommit-scripts/check-terminology
         language: script
         types: [text]
-EOF
-  else
-    cat >> "$CONFIG" <<'EOF'
+'''
+lines.insert(insert_at, hook)
+
+with open('$CONFIG', 'w') as f:
+    f.writelines(lines)
+"
+else
+  echo "Adding terminology-guard as new repo: local block..."
+  cat >> "$CONFIG" <<EOF
 
   - repo: local
     hooks:
-      - id: terminology-guard
-        name: Terminology Guard
-        entry: precommit-scripts/check-terminology
-        language: script
-        types: [text]
+$HOOK_ENTRY
 EOF
-  fi
 fi
 
 # --- blocklist reminder ---

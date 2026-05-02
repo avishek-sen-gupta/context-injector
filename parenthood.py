@@ -63,9 +63,7 @@ class HierarchyGraph:
             connector = "└── " if is_last else "├── "
             score_str = f" ({score:.2f})" if score is not None else ""
             if name in seen:
-                lines.append(
-                    f"{prefix}{connector}{name}{score_str} (see above)"
-                )
+                lines.append(f"{prefix}{connector}{name}{score_str} (see above)")
                 return
             seen.add(name)
             lines.append(f"{prefix}{connector}{name}{score_str}")
